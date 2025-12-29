@@ -10,17 +10,25 @@ Ez a Python script segít a fényképek előkészítésében a Backblaze B2 (vag
 - **Biztonságos Másolás:** Nem törli az eredeti fájlokat, csak másolatokat készít.
 - **Idempotens működés:** Ha újra lefuttatod, a már létező célfájlokat átugorja.
 
-## Használat
+## Feltöltés a Backblaze B2-re
 
-1. Telepítsd a Pythont (ha még nincs fent).
-2. Másold a `prepare_photos.py` fájlt abba a mappába, ahol a fotóid vannak.
-3. Nyiss egy terminált / parancssort ebben a mappában.
-4. Futtasd a scriptet:
-   ```bash
-   python prepare_photos.py
-   ```
+Mivel a böngészős feltöltés sok fájl esetén gyakran megszakad, javasoljuk a következő módszereket:
+
+### A) B2 Parancssori Eszköz (CLI) - Javasolt
+Ez a legbiztosabb módszer. Ha megszakad a kapcsolat, csak futtasd újra, és ott folytatja, ahol abbahagyta.
+
+1. Telepítsd: `pip install b2`
+2. Jelentkezz be: `b2 authorize-account <keyId> <applicationKey>`
+3. Szinkronizálj: `b2 sync . b2://vödör-neve`
+
+### B) Cyberduck (Grafikus felület)
+Ingyenes, grafikus fájlkezelő program.
+1. Töltsd le: [cyberduck.io](https://cyberduck.io/)
+2. Kapcsolódásnál válaszd a **Backblaze B2**-t.
+3. Add meg a kulcsaidat és húzd be a fájlokat.
 
 ## Technikai részletek
+...
 
 A script a következő alapvető Python könyvtárakat használja:
 - `os`, `shutil`: Fájlrendszer műveletek.
