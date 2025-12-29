@@ -18,7 +18,7 @@ Mivel a böngészős feltöltés sok fájl esetén gyakran megszakad, javasoljuk
 Ez a legbiztosabb módszer. Ha megszakad a kapcsolat, csak futtasd újra, és ott folytatja, ahol abbahagyta.
 
 1. Telepítsd: `pip install b2`
-2. Jelentkezz be: `b2 authorize-account <keyId> <applicationKey>`
+2. Jelentkezz be: `b2 account authorize <keyId> <applicationKey>`
 3. Szinkronizálj: `b2 sync . b2://vödör-neve`
 
 ### B) Cyberduck (Grafikus felület)
