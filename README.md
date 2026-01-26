@@ -1,14 +1,14 @@
-# Backblaze B2 Photo Preparation Script (v1.0.0)
+# Backblaze B2 Photo Preparation Script (v1.1)
 
 Ez a Python script segít a fényképek előkészítésében a Backblaze B2 (vagy bármely más felhő alapú tárhely) feltöltéséhez, ahol a speciális karakterek és a komplex mappaszerkezet akadályt jelenthetnek.
 
 ## Funkciók
 
-- **Automatikus Karaktertisztítás:** Eltávolítja az ékezeteket, a szóközöket és speciális karaktereket kötőjelre cseréli.
-- **Mappaszerkezet Lapítása:** A teljes relatív útvonalat beépíti a fájlnévbe (pl. `2023/Nyar/kep.jpg` -> `2023-nyar--kep.jpg`), és a fájlokat a főkönyvtárba másolja.
+- **Automatikus Karaktertisztítás:** Eltávolítja az ékezeteket, a szóközöket és speciális karaktereket kötőjelre cseréli a fájl- és mappanevekben is.
+- **Mappaszerkezet Megőrzése:** A script megőrzi az eredeti könyvtárfát (pl. `2023/Nyar/Balaton`), de tisztított nevekkel hozza létre egy új mappában (`elokeszitett_kepek`).
+- **Kizárólag Képek:** Csak a támogatott képfájlokat (`.jpg`, `.png`, `.cr2`, `.nef`, stb.) másolja, a szemetet kiszűri.
 - **Szerkesztett Képek Prioritása:** Ha egy mappában megtalálható egy kép eredeti és `-szerkesztve` végződésű változata is, a script csak a szerkesztett változatot dolgozza fel.
-- **Biztonságos Másolás:** Nem törli az eredeti fájlokat, csak másolatokat készít.
-- **Idempotens működés:** Ha újra lefuttatod, a már létező célfájlokat átugorja.
+- **Biztonságos Másolás:** Nem töröl semmit, az összes feldolgozott képet az `elokeszitett_kepek` mappába gyűjti.
 
 ## Feltöltés a Backblaze B2-re
 

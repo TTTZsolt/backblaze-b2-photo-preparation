@@ -9,8 +9,6 @@ def clean_string(text):
     és kisbetűssé alakítja a szöveget.
     """
     # 1. Ékezetek eltávolítása (Normalizálás)
-    # Az 'NFD' szétbontja a karaktereket (pl. á -> a + ´), 
-    # a 'Mn' kategória pedig a mellékjeleket jelöli, amiket eldobunk.
     text = unicodedata.normalize('NFD', text)
     text = "".join([c for c in text if unicodedata.category(c) != 'Mn'])
     
@@ -18,8 +16,7 @@ def clean_string(text):
     text = text.lower()
     
     # 3. Speciális karakterek cseréje kötőjelre
-    # Csak az angol ábécé betűit, számokat és a pontot hagyjuk meg (utóbbi a kiterjesztés miatt)
-    # Minden mást (szóköz, írásjelek, perjelek) kötőjellé alakítunk.
+    # Csak az angol ábécé betűit, számokat és a pontot hagyjuk meg
     text = re.sub(r'[^a-z0-9.]', '-', text)
     
     # 4. Több egymás melletti kötőjel összevonása egyetlen kötőjellé
@@ -33,77 +30,99 @@ def clean_string(text):
 def prepare_b2_upload():
     # A script abban a könyvtárban dolgozik, ahol elindították
     root_dir = os.getcwd()
+    target_dir_name = "elokeszitett_kepek"
+    target_dir_root = os.path.join(root_dir, target_dir_name)
     
     # Engedélyezett képfájl kiterjesztések
     valid_extensions = ('.jpg', '.jpeg', '.png', '.cr2', '.nef')
     
-    print(f"--- Backblaze B2 Elokeszites inditasa: {root_dir} ---")
+    print(f"--- Backblaze B2 Elokeszites inditasa v1.1 ---")
+    print(f"Forras: {root_dir}")
+    print(f"Cel:    {target_dir_root}")
     
     # Bejárjuk a fájlrendszert
-    # Az os.walk() visszaadja az aktuális mappát (root), az alkönyvtárakat (dirs) és a fájlokat (files)
     for subdir, dirs, files in os.walk(root_dir):
+        # A célkönyvtárat magát hagyjuk ki a keresésből, hogy ne rekurzáljunk bele
+        if target_dir_name in subdir:
+            continue
+
         # 1. Először megkeressük a mappában az összes "-szerkesztve" végű fájlt
-        # Ez azért kell, hogy tudjuk, melyik eredeti fájlokat kell majd átugrani
         edited_bases = set()
         for f in files:
             name, ext = os.path.splitext(f)
             if name.lower().endswith("-szerkesztve"):
-                # Levágjuk a "-szerkesztve" (12 karakter: kötőjel + 11 betű) részt az alapnévből
-                base = name.lower()[:-12]
+                base = name.lower()[:-12] # "-szerkesztve" levágása
                 edited_bases.add(base)
 
         for filename in files:
-            # Csak a megadott kiterjesztésű fájlokkal foglalkozunk
+            # CSAK a megadott kiterjesztésű fájlokkal foglalkozunk (Képek szűrése)
             if filename.lower().endswith(valid_extensions):
                 
-                # Meghatározzuk a fájl relatív útját a főkönyvtárhoz képest
+                # Meghatározzuk a relatív útvonalat
+                # pl. "Képek/2023/Nyár" -> "kepek/2023/nyar" (tisztítva)
                 relative_path = os.path.relpath(subdir, root_dir)
                 
-                # Szétválasztjuk a fájlnevet és a kiterjesztést a tisztításhoz
+                if relative_path == ".":
+                     # Ha a fájl a főkönyvtárban van, akkor közvetlenül a célmappába kerül
+                    clean_relative_path = ""
+                else:
+                    # Feldaraboljuk az útvonalat és minden elemet külön tisztítunk
+                    path_parts = relative_path.split(os.sep)
+                    clean_parts = [clean_string(part) for part in path_parts]
+                    clean_relative_path = os.path.join(*clean_parts)
+                
+                # Szétválasztjuk a fájlnevet és a kiterjesztést
                 name_part, extension_part = os.path.splitext(filename)
                 
-                # 2. Ellenőrizzük, hogy van-e szerkesztett változata ennek a fájlnak
-                # Ha van, akkor az eredetit átugorjuk
+                # Ellenőrizzük, hogy van-e szerkesztett változata
                 if name_part.lower() in edited_bases:
                     print(f"Atugorva (van szerkesztett valtozat): {filename}")
                     continue
 
-                extension_part = extension_part.lower() # A kiterjesztés is legyen kisbetűs
+                clean_name = clean_string(name_part)
+                extension_part = extension_part.lower()
+                new_filename = f"{clean_name}{extension_part}"
                 
-                # Új név generálása
-                if relative_path == ".":
-                    # Ha a fájl a főkönyvtárban (root) van
-                    new_name_base = clean_string(name_part)
-                else:
-                    # Ha alkönyvtárban van: [RelatívÚt]--[Fájlnév]
-                    clean_path = clean_string(relative_path)
-                    clean_name = clean_string(name_part)
-                    new_name_base = f"{clean_path}--{clean_name}"
+                # Cél elérése
+                # Teljes struktúra: target_dir / cleaned_subdirs / cleaned_filename
+                final_target_dir = os.path.join(target_dir_root, clean_relative_path)
+                final_target_path = os.path.join(final_target_dir, new_filename)
                 
-                new_filename = f"{new_name_base}{extension_part}"
-                
-                # Teljes elérési utak
-                old_path = os.path.join(subdir, filename)
-                new_path = os.path.join(root_dir, new_filename)
-                
-                # Ha a fájl már a helyén van és jó a neve, ne csináljunk semmit
-                if old_path == new_path:
-                    continue
+                # Létrehozzuk a célmappát, ha még nem létezik
+                if not os.path.exists(final_target_dir):
+                    try:
+                        os.makedirs(final_target_dir)
+                    except OSError as e:
+                        print(f"Hiba a mappa letrehozasakor ({final_target_dir}): {e}")
+                        continue
 
-                # Ha a célfájl már létezik, átugorjuk a feldolgozást
-                # Ez lehetővé teszi, hogy a scriptet többször is lefuttassuk
-                if os.path.exists(new_path):
-                    print(f"Atugorva (mar letezik): {new_filename}")
+                # Ha a fájl már létezik, átugorjuk
+                if os.path.exists(final_target_path):
+                    print(f"Atugorva (mar letezik): {os.path.join(clean_relative_path, new_filename)}")
                     continue
+                
+                # Ütközéskezelés (bár a mappastruktúra miatt ritkább, de lehetséges)
+                # Ha véletlenül két fájl neve tisztítva ugyanaz lenne ugyanabban a mappában
+                counter = 1
+                base_target_path = final_target_path
+                while os.path.exists(final_target_path):
+                     # Ez a ciklus technikailag az előző "skip" miatt nem fut le jelen formában,
+                     # de meghagyjuk a logikát arra az esetre, ha a jövőben változtatnánk a "skip" szabályon.
+                     # Jelenleg a "skip" erősebb.
+                     pass 
+                     # (A fenti skip miatt ez a rész most nem releváns, de a robusztusság kedvéért
+                     #  kivehetjük a skip-et, ha felülírást vagy verziózást akarunk. Most marad a skip.)
 
-                # Fájl másolása (átnevezéssel együtt)
-                # A shutil.copy2 megőrzi a fájl eredeti metaadatait (pl. készítés dátuma)
+                # Fájl másolása
                 try:
-                    shutil.copy2(old_path, new_path)
-                    # A print-nél az eredeti nevet is tisztítjuk a biztonság kedvéért a konzolon
-                    print(f"Masolva: {new_filename}")
+                    old_path = os.path.join(subdir, filename)
+                    shutil.copy2(old_path, final_target_path)
+                    print(f"Masolva: {os.path.join(clean_relative_path, new_filename)}")
                 except Exception as e:
                     print(f"Hiba a fajl masolasa soran: {e}")
+            else:
+                # Nem képfájl, csendben figyelmen kívül hagyjuk (vagy debug logolhatnánk)
+                pass
 
     print("--- Folyamat befejezodott! ---")
 
