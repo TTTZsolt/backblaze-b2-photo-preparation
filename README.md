@@ -15,7 +15,7 @@ Ez a Python script segít a fényképek előkészítésében a Backblaze B2 (vag
 2. Menj abba a mappába, amely alatt az átalakítandó fényképek vannak
 3. Másold ebbe a mappába a prepare_photos.py file-t
 4. Futtasd a `python prepare_photos.py` parancsot
-5. 
+5. Létrejön a `elokeszitett_kepek` könyvtár, ahonnét a képek feltölthetők B2-re
 
 ## Feltöltés a Backblaze B2-re
 
