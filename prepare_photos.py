@@ -2,6 +2,8 @@ import os
 import shutil
 import unicodedata
 import re
+from PIL import Image
+import pillow_heif
 
 def clean_string(text):
     """
@@ -33,12 +35,15 @@ def prepare_b2_upload():
     target_dir_name = "elokeszitett_kepek"
     target_dir_root = os.path.join(root_dir, target_dir_name)
     
-    # Engedélyezett képfájl kiterjesztések
-    valid_extensions = ('.jpg', '.jpeg', '.png', '.cr2', '.nef')
+    # Engedélyezett képfájl kiterjesztések, kiegészítve HEIC/HEIF-fel
+    valid_extensions = ('.jpg', '.jpeg', '.png', '.cr2', '.nef', '.heic', '.heif')
     
-    print(f"--- Backblaze B2 Elokeszites inditasa v1.1 ---")
+    print(f"--- Backblaze B2 Elokeszites inditasa v1.2 ---")
     print(f"Forras: {root_dir}")
     print(f"Cel:    {target_dir_root}")
+    
+    # HEIC támogatás inicializálása
+    pillow_heif.register_heif_opener()
     
     # Bejárjuk a fájlrendszert
     for subdir, dirs, files in os.walk(root_dir):
@@ -81,7 +86,12 @@ def prepare_b2_upload():
 
                 clean_name = clean_string(name_part)
                 extension_part = extension_part.lower()
-                new_filename = f"{clean_name}{extension_part}"
+                
+                # HEIC fájlok konvertálása JPG-be, így a cél kiterjesztés jpg lesz
+                is_heic = extension_part in ('.heic', '.heif')
+                target_extension = '.jpg' if is_heic else extension_part
+                
+                new_filename = f"{clean_name}{target_extension}"
                 
                 # Cél elérése
                 # Teljes struktúra: target_dir / cleaned_subdirs / cleaned_filename
@@ -113,13 +123,20 @@ def prepare_b2_upload():
                      # (A fenti skip miatt ez a rész most nem releváns, de a robusztusság kedvéért
                      #  kivehetjük a skip-et, ha felülírást vagy verziózást akarunk. Most marad a skip.)
 
-                # Fájl másolása
+                # Fájl másolása vagy konvertálása
                 try:
                     old_path = os.path.join(subdir, filename)
-                    shutil.copy2(old_path, final_target_path)
-                    print(f"Masolva: {os.path.join(clean_relative_path, new_filename)}")
+                    if is_heic:
+                        # HEIC megnyitása és mentése JPG-ként
+                        with Image.open(old_path) as img:
+                            # A HEIC EXIF orientációjának alkalmazása, ha van, és konvertálás RGB-be
+                            img.convert('RGB').save(final_target_path, "JPEG", quality=95)
+                        print(f"Konvertalva es masolva (HEIC->JPG): {os.path.join(clean_relative_path, new_filename)}")
+                    else:
+                        shutil.copy2(old_path, final_target_path)
+                        print(f"Masolva: {os.path.join(clean_relative_path, new_filename)}")
                 except Exception as e:
-                    print(f"Hiba a fajl masolasa soran: {e}")
+                    print(f"Hiba a fajl feldolgozasa soran ({filename}): {e}")
             else:
                 # Nem képfájl, csendben figyelmen kívül hagyjuk (vagy debug logolhatnánk)
                 pass
