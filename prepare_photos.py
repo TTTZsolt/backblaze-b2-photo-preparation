@@ -33,7 +33,12 @@ def prepare_b2_upload():
     # A script abban a könyvtárban dolgozik, ahol elindították
     root_dir = os.getcwd()
     target_dir_name = "elokeszitett_kepek"
+    thumb_dir_name = "elokeszitett_thumbnails"
     target_dir_root = os.path.join(root_dir, target_dir_name)
+    thumb_dir_root = os.path.join(root_dir, thumb_dir_name)
+    
+    # Thumbnail méret (a dokumentáció alapján 400px)
+    thumb_size = (400, 400)
     
     # Engedélyezett képfájl kiterjesztések, kiegészítve HEIC/HEIF-fel
     valid_extensions = ('.jpg', '.jpeg', '.png', '.cr2', '.nef', '.heic', '.heif')
@@ -46,9 +51,12 @@ def prepare_b2_upload():
     pillow_heif.register_heif_opener()
     
     # Bejárjuk a fájlrendszert
+    processed_count = 0
+    new_count = 0
+    
     for subdir, dirs, files in os.walk(root_dir):
-        # A célkönyvtárat magát hagyjuk ki a keresésből, hogy ne rekurzáljunk bele
-        if target_dir_name in subdir:
+        # A célkönyvtárakat hagyjuk ki a keresésből, hogy ne rekurzáljunk bele
+        if target_dir_name in subdir or "kepek02" in subdir or thumb_dir_name in subdir:
             continue
 
         # 1. Először megkeressük a mappában az összes "-szerkesztve" végű fájlt
@@ -98,18 +106,26 @@ def prepare_b2_upload():
                 final_target_dir = os.path.join(target_dir_root, clean_relative_path)
                 final_target_path = os.path.join(final_target_dir, new_filename)
                 
-                # Létrehozzuk a célmappát, ha még nem létezik
-                if not os.path.exists(final_target_dir):
-                    try:
-                        os.makedirs(final_target_dir)
-                    except OSError as e:
-                        print(f"Hiba a mappa letrehozasakor ({final_target_dir}): {e}")
-                        continue
+                final_thumb_dir = os.path.join(thumb_dir_root, clean_relative_path)
+                final_thumb_path = os.path.join(final_thumb_dir, new_filename) # A thumbnail is JPG lesz vagy az eredeti kiterjesztés
 
-                # Ha a fájl már létezik, átugorjuk
+                # Létrehozzuk a célmappákat, ha még nem léteznek
+                for d in [final_target_dir, final_thumb_dir]:
+                    if not os.path.exists(d):
+                        try:
+                            os.makedirs(d)
+                        except OSError as e:
+                            print(f"Hiba a mappa letrehozasakor ({d}): {e}")
+                            continue
+
+                processed_count += 1
+
+                # Ha a nagy kép már megvan, mindent átugrunk
                 if os.path.exists(final_target_path):
                     print(f"Atugorva (mar letezik): {os.path.join(clean_relative_path, new_filename)}")
                     continue
+                
+                new_count += 1
                 
                 # Ütközéskezelés (bár a mappastruktúra miatt ritkább, de lehetséges)
                 # Ha véletlenül két fájl neve tisztítva ugyanaz lenne ugyanabban a mappában
@@ -123,25 +139,76 @@ def prepare_b2_upload():
                      # (A fenti skip miatt ez a rész most nem releváns, de a robusztusság kedvéért
                      #  kivehetjük a skip-et, ha felülírást vagy verziózást akarunk. Most marad a skip.)
 
-                # Fájl másolása vagy konvertálása
+                # Fájl másolása vagy konvertálása ÉS Thumbnail készítés
                 try:
                     old_path = os.path.join(subdir, filename)
-                    if is_heic:
-                        # HEIC megnyitása és mentése JPG-ként
-                        with Image.open(old_path) as img:
-                            # A HEIC EXIF orientációjának alkalmazása, ha van, és konvertálás RGB-be
-                            img.convert('RGB').save(final_target_path, "JPEG", quality=95)
-                        print(f"Konvertalva es masolva (HEIC->JPG): {os.path.join(clean_relative_path, new_filename)}")
+                    
+                    # 1. Eredeti (vagy konvertált) kép mentése (csak ha még nincs meg)
+                    if not os.path.exists(final_target_path):
+                        if is_heic:
+                            with Image.open(old_path) as img:
+                                img.convert('RGB').save(final_target_path, "JPEG", quality=95)
+                            print(f"Konvertalva es masolva (HEIC->JPG): {os.path.join(clean_relative_path, new_filename)}")
+                        else:
+                            shutil.copy2(old_path, final_target_path)
+                            print(f"Masolva: {os.path.join(clean_relative_path, new_filename)}")
                     else:
-                        shutil.copy2(old_path, final_target_path)
-                        print(f"Masolva: {os.path.join(clean_relative_path, new_filename)}")
+                        # Ha a nagy kép már megvan, csak csendben nyugtázzuk
+                        pass
+
+                    # 2. Thumbnail készítése (mindig JPG-be mentjük a hatékonyság érdekében)
+                    # Ha a kiterjesztés nem .jpg, a final_thumb_path-ot korrigáljuk
+                    if not final_thumb_path.lower().endswith(('.jpg', '.jpeg')):
+                         thumb_name = os.path.splitext(new_filename)[0] + ".jpg"
+                         final_thumb_path = os.path.join(final_thumb_dir, thumb_name)
+
+                    if not os.path.exists(final_thumb_path):
+                        with Image.open(old_path) as img:
+                            # EXIF orientáció kezelése (fontos a thumbnailnél)
+                            if hasattr(img, '_getexif'):
+                                exif = img._getexif()
+                                if exif:
+                                    orientation = exif.get(0x0112)
+                                    if orientation == 3: img = img.rotate(180, expand=True)
+                                    elif orientation == 6: img = img.rotate(270, expand=True)
+                                    elif orientation == 8: img = img.rotate(90, expand=True)
+                            
+                            img.thumbnail(thumb_size, Image.Resampling.LANCZOS)
+                            if img.mode in ("RGBA", "P"):
+                                img = img.convert("RGB")
+                            img.save(final_thumb_path, "JPEG", quality=75, optimize=True)
+                            print(f"  -> Thumbnail elkeszitve: {os.path.basename(final_thumb_path)}")
                 except Exception as e:
                     print(f"Hiba a fajl feldolgozasa soran ({filename}): {e}")
             else:
                 # Nem képfájl, csendben figyelmen kívül hagyjuk (vagy debug logolhatnánk)
                 pass
 
-    print("--- Folyamat befejezodott! ---")
+    print("--- Lokalis elokeszites befejezodott! ---")
+    
+    # Rclone feltöltés indítása
+    import subprocess
+    print(f"\n--- Feltoltes inditasa a Backblaze B2-re (rclone) ---")
+    remote_target = "b2_storage:Kepek02" # A távoli rclone cél (Figyelem: Kepek02 nagy K-val!)
+    
+    try:
+        # A. Eredeti képek feltöltése
+        print(f"1. Nagy kepek feltoltese...")
+        cmd_main = ["rclone", "copy", target_dir_root, remote_target, "-v", "-P", "--update"]
+        subprocess.run(cmd_main, check=True)
+        
+        # B. Thumbnail-ek feltöltése
+        print(f"\n2. Thumbnail-ek feltoltese...")
+        remote_thumbs = f"{remote_target.lower()}-thumbs"
+        cmd_thumbs = ["rclone", "copy", thumb_dir_root, remote_thumbs, "-v", "-P", "--update"]
+        subprocess.run(cmd_thumbs, check=True)
+        
+        print(f"\n--- Feltoltes sikeresen befejezodott! ---")
+    except subprocess.CalledProcessError as e:
+        print(f"\nHIBA: Az rclone futtatasa soran hiba tortent (kod: {e.returncode}).")
+    except FileNotFoundError:
+        print(f"\nHIBA: Az 'rclone' program nem talalhato a rendszerben.")
+        print("Kerlek telepitsd az rclone-t, vagy ellenorizd a PATH beallitasokat!")
 
 if __name__ == "__main__":
     prepare_b2_upload()
