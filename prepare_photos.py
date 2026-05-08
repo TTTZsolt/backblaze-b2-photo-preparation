@@ -194,13 +194,15 @@ def prepare_b2_upload():
     try:
         # A. Eredeti képek feltöltése
         print(f"1. Nagy kepek feltoltese...")
+        # A -v (verbose) kiírja a fájlneveket, a -P mutatja a haladást
         cmd_main = ["rclone", "copy", target_dir_root, remote_target, "-v", "-P", "--update"]
         subprocess.run(cmd_main, check=True)
         
         # B. Thumbnail-ek feltöltése
         print(f"\n2. Thumbnail-ek feltoltese...")
         remote_thumbs = f"{remote_target.lower()}-thumbs"
-        cmd_thumbs = ["rclone", "copy", thumb_dir_root, remote_thumbs, "-v", "-P", "--update"]
+        # A -q (quiet) elrejti az egyedi fájlneveket, csak a statisztika marad
+        cmd_thumbs = ["rclone", "copy", thumb_dir_root, remote_thumbs, "-q", "-P", "--update"]
         subprocess.run(cmd_thumbs, check=True)
         
         print(f"\n--- Feltoltes sikeresen befejezodott! ---")
