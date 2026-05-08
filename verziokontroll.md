@@ -14,6 +14,7 @@ Ez a dokumentum követi a projekt mérföldköveit és fejlesztési szakaszait.
 
 | Verzió | Sorszám | Dátum | Commit üzenet |
 |:------ |:------- |:----- |:------------- |
+| V1.2   | #5      | 2026.05.08 | Tesztterv bővítése tesztelési naplóval. |
 | V1.2   | #4      | 2026.05.08 | Rclone feltöltési naplózás finomhangolása (részletes nagy képek, tömör thumbnail lista). |
 | V1.2   | #3      | 2026.05.08 | Tesztterv létrehozása a duplikáció elleni védelem ellenőrzésére. |
 | V1.2   | #2      | 2026.05.08 | Dokumentáció frissítése az új feltöltési elvekkel és folyamatokkal. |
