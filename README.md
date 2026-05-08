@@ -1,116 +1,79 @@
-# Fénykép Kezelő Eszközök (Backblaze B2 előkészítés)
+# Fénykép Kezelő és B2 Feltöltő Rendszer (v1.2)
 
-Ez a repository két fő eszközt tartalmaz a fényképek rendszerezéséhez és felhőbe (Backblaze B2) való feltöltésének előkészítéséhez.
+Ez a projekt a fényképek rendszerezését, előkészítését és a Backblaze B2 felhőtárhelyre való automatizált feltöltését valósítja meg.
 
-## A Folyamat Lépései
+## 1. A Teljes Munkafolyamat (Workflow)
 
-1. **Szortírozás (`sort_by_date.py`):** A nyers képek dátum szerinti rendezése `Év/Hónap` mappákba.
-2. **Előkészítés (`prepare_photos.py`):** A szortírozott képek nevének tisztítása és optimalizálása a feltöltéshez.
+A rendszer három fő fázison viszi keresztül a képeket:
 
-Ez a Python script segít a fényképek előkészítésében a Backblaze B2 (vagy bármely más felhő alapú tárhely) feltöltéséhez, ahol a speciális karakterek és a komplex mappaszerkezet akadályt jelenthetnek.
+### A. Rendszerezés (`sort_by_date.py`)
+*   **Forrás:** Bármilyen mappa, ahol az új, ömlesztett képek vannak.
+*   **Cél:** `c:\Users\zsolt.tuske\Pictures\Véglegesített képek\[ÉV]\[HÓNAP]\`
+*   **Művelet:** A képeket az EXIF (készítési dátum) adatok alapján év/hónap bontású mappákba mozgatja.
 
-A [fénykép előkészítés](https://github.com/upstage/ "Hol tárolom a különbözző fázisokban a fényképeket") folyamata ezen a linken tekinthető át 
+### B. Előkészítés és Tisztítás (`prepare_photos.py`)
+*   **Futtatási hely:** `c:\Users\zsolt.tuske\Pictures\Véglegesített képek\`
+*   **Kimeneti mappák (automatikusan létrejönnek):**
+    *   `.\elokeszitett_kepek\` -> Tisztított nevű nagy képek.
+    *   `.\elokeszitett_thumbnails\` -> 400px-es bélyegképek a vetítéshez.
+*   **Háttérfolyamatok:**
+    1.  **Névtisztítás:** Ékezetek eltávolítása, szóközök/speciális karakterek cseréje kötőjelre (B2 kompatibilitás).
+    2.  **Szerkesztett képek kezelése:** Ha létezik `-szerkesztve` végű fájl, az eredetit kihagyja.
+    3.  **HEIC Konvertálás:** Az iPhone formátumú képeket automatikusan JPG-be alakítja.
+    4.  **Bélyegkép generálás:** Minden új képhez készít egy 400px széles JPEG előnézetet.
 
-## 1. Szortírozás dátum szerint (`sort_by_date.py`)
-
-Ez a script a képek metaadataiban (EXIF) tárolt készítési idő alapján rendezi a fájlokat.
-
-### Funkciók
-- **Automatikus szortírozás:** A képeket a `c:\Users\zsolt.tuske\Pictures\Véglegesített képek\[Év]\[Hónap]\` mappába mozgatja.
-- **EXIF támogatás:** Elsősorban a készítés idejét nézi, ha az hiányzik, a fájl módosítási dátumát használja.
-- **Mappakezelés:** Automatikusan létrehozza a szükséges év és hónap mappákat.
-
-### Futtatás
-```cmd
-python sort_by_date.py "C:\FORRÁS_MAPPA"
-```
-
-## 2. Előkészítés feltöltéshez (`prepare_photos.py`)
-
-Ez a script segít a fényképek nevének és struktúrájának tisztításában a Backblaze B2 feltöltés előtt.
-
-### Funkciók
-- **Automatikus Karaktertisztítás:** Eltávolítja az ékezeteket, a szóközöket és speciális karaktereket kötőjelre cseréli.
-- **Mappaszerkezet Megőrzése:** A script megőrzi az eredeti könyvtárfát, de tisztított nevekkel hozza létre egy új mappában (`elokeszitett_kepek`).
-- **Szerkesztett Képek Prioritása:** Ha egy mappában megtalálható egy kép eredeti és `-szerkesztve` végződésű változata is, csak a szerkesztett változatot dolgozza fel.
-- **HEIC Konvertálás:** A HEIC/HEIF formátumú képeket automatikusan JPG-be konvertálja.
-
-### Futtatás
-1. Nyiss egy cmd ablakot a feldolgozandó képek mappájában.
-2. Futtasd a `python prepare_photos.py` parancsot.
-3. A tisztított képek az `elokeszitett_kepek` mappába kerülnek.
-
-## Feltöltés a Backblaze B2-re
-
-Mivel a böngészős feltöltés sok fájl esetén gyakran megszakad, javasoljuk a következő módszereket:
-
-### A) B2 Parancssori Eszköz (CLI) - Javasolt
-
-Ez a legbiztosabb módszer. Ha megszakad a kapcsolat, csak futtasd újra, és ott folytatja, ahol abbahagyta.
-
-1. Telepítsd: `pip install b2`
-2. Jelentkezz be: `b2 account authorize <keyId> <applicationKey>`
-3. Szinkronizálj az alábbi módszerek egyikével:
-   - **Teljes tartalom (Lépj be a mappába):**
-     
-     ```cmd
-     cd elokeszitett_kepek
-     b2 sync . b2://vödör-neve
-     ```
-     
-     *(A `.` az aktuális mappát jelöli)*
-   - **Teljes tartalom (Maradj az eredeti mappában):**
-     
-     ```cmd
-     b2 sync elokeszitett_kepek b2://vödör-neve
-     ```
-   - **Csak egy adott almappa (pl. 2026/03) szinkronizálása:**
-     Lépj be az `elokeszitett_kepek` mappába, majd add meg a kívánt almappát mind a forrásnál, mind a célnál:
-     
-     ```cmd
-     cd elokeszitett_kepek
-     b2 sync 2026/03 b2://vödör-neve/2026/03
-     ```
-
-### B) Cyberduck (Grafikus felület)
-
-Ingyenes, grafikus fájlkezelő program.
-
-1. Töltsd le: [cyberduck.io](https://cyberduck.io/)
-2. Kapcsolódásnál válaszd a **Backblaze B2**-t.
-3. Add meg a kulcsaidat és húzd be a fájlokat.
-
-## Technikai részletek
-
-...
-
-A script a következő alapvető Python könyvtárakat használja:
-
-- `os`, `shutil`: Fájlrendszer műveletek.
-- `unicodedata`: Ékezet-mentesítés.
-- `re`: Reguláris kifejezések a névtisztításhoz.
+### C. Automatikus Feltöltés (Rclone integráció)
+A `prepare_photos.py` végén automatikusan elindul a feltöltés a Backblaze B2-re:
+*   `elokeszitett_kepek` -> `b2://Kepek02` vödörbe.
+*   `elokeszitett_thumbnails` -> `b2://kepek02-thumbs` vödörbe.
 
 ---
 
-# Photo Management Tools (v1.2) - English
+## 2. Használati Útmutató (Parancsok)
 
-This repository contains two main scripts for organizing and preparing photos for Backblaze B2 upload.
+### 1. Lépés: Szortírozás
+Ha új képeid vannak (pl. egy pendrive-on vagy letöltve), rendezd őket a végleges helyükre:
+```cmd
+python "m:\Saját meghajtó\IT\Programok\Fénykép előkészítés BlackBlaze-be másolás\sort_by_date.py" "C:\FORRÁS_MAPPA"
+```
 
-## 1. Sort by Date (`sort_by_date.py`)
-Moves photos to a structured `Year/Month` directory based on EXIF metadata.
+### 2. Lépés: Előkészítés és Feltöltés
+Lépj be a véglegesített képek mappájába, és futtasd az előkészítőt:
+```cmd
+cd "c:\Users\zsolt.tuske\Pictures\Véglegesített képek"
+python "m:\Saját meghajtó\IT\Programok\Fénykép előkészítés BlackBlaze-be másolás\prepare_photos.py"
+```
 
-## 2. Prepare for Upload (`prepare_photos.py`)
-Cleans filenames (removes accents/spaces) and prepares the directory structure for cloud storage.
+---
 
-## Features
+## 3. Hogyan kerüljük el a duplikációkat?
 
-- **Character Normalization:** Removes accents and replaces special characters/spaces with dashes.
-- **Path Flattening:** Includes the full relative path in the filename (e.g., `2023/Summer/img.jpg` -> `2023-summer--img.jpg`).
-- **Edited Version Priority:** Automatically skips original files if a version ending in `-szerkesztve` exists.
-- **Safe Copying:** Uses `shutil.copy2` to preserve metadata and keep original files intact.
-- **Skip Existing Files:** Skips files that have already been processed in the root directory.
+A rendszer három szinten védekezik a többszörös feltöltés és a felesleges adattárolás ellen:
 
-## Requirements
+1.  **Helyi ellenőrzés (`prepare_photos.py`):**
+    A script ellenőrzi az `elokeszitett_kepek` mappát. Ha egy fájl már létezik ott tisztított névvel, **átugorja a feldolgozást** (nem generálja újra a thumbnail-t sem).
+    
+2.  **Intelligens szinkronizáció (`rclone`):**
+    A feltöltés az `--update` kapcsolóval fut. Ez azt jelenti, hogy az `rclone` csak akkor tölt fel egy fájlt, ha az **még nincs fenn** a B2-n, vagy ha a helyi változat **újsabb/nagyobb**, mint a felhőbeli.
 
-- Python 3.x
-- No external dependencies required.
+3.  **Felhő oldali verziókezelés (B2 Lifecycle):**
+    Beállítottunk egy életciklus szabályt ("Keep only last version"), ami biztosítja, hogy ha egy képet (vagy annak metaadatait) frissítjük, a Backblaze B2 automatikusan törölje a régi verziókat 1 nap után, így nem foglalják a helyet.
+
+---
+
+## 4. Karbantartó Eszközök
+
+### B2 Életciklus beállítása (`set_b2_lifecycle.py`)
+Ha új vödröt hozol létre, ezzel a scripttel tudod egy lépésben beállítani rajta az optimális verziókezelési szabályokat:
+```cmd
+python set_b2_lifecycle.py
+```
+
+### Kézi szinkronizáció (ha szükséges)
+Ha csak a feltöltést szeretnéd újrafuttatni az előkészítés nélkül:
+```cmd
+rclone copy "c:\...\elokeszitett_kepek" b2_storage:Kepek02 -P --update
+```
+
+---
+*Utolsó frissítés: 2026.05.08 (v1.2)*

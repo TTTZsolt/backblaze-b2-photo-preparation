@@ -8,11 +8,15 @@ Ez a dokumentum követi a projekt mérföldköveit és fejlesztési szakaszait.
 
 # Verziótörténet
 
+- **V1.2**: Thumbnail generálás integrálása, B2 életciklus automatizálás és hibajavítások (duplikációk és rekurzió elleni védelem).
+
 ## # Commit-ok
 
-| Verzió | Commit | Magyarázat |
-|:------ |:------ |:---------- |
-|        |        |            |
-|        |        |            |
-|        |        |            |
-|        |        |            |
+| Verzió | Commit | Magyarázat                                                                                                                          |
+|:------ |:------ |:----------------------------------------------------------------------------------------------------------------------------------- |
+| V1.2   | #1     | Véglegesített könyvtárban elhelyezett képekből Thumbnail generálás majd B2-be töltés úgy, hogy ne lehessen duplikált kép feltöltés. |
+| V1.2   | #2     | Dokumentáció frissítése az új feltöltési elvekkel és folyamatokkal. |
+
+Első teszt: 2007 feltöltése
+
+Második teszt: 2008 feltöltése (ami már fenn van)
