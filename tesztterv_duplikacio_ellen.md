@@ -9,7 +9,18 @@ Ez a dokumentum leírja azokat a teszteseteket, amelyekkel igazolható, hogy a r
 
 ---
 
-## 2. Tesztesetek
+## 2. Futtatandó parancs
+
+A tesztelés során minden esetben az alábbi parancsot használjuk a véglegesített képek mappájában állva:
+
+```cmd
+cd "c:\Users\zsolt.tuske\Pictures\Véglegesített képek"
+python "m:\Saját meghajtó\IT\Programok\Fénykép előkészítés BlackBlaze-be másolás\prepare_photos.py"
+```
+
+---
+
+## 3. Tesztesetek
 
 ### T1: Helyi szintű duplikáció (Skip logic)
 *   **Cél:** Igazolni, hogy a `prepare_photos.py` nem dolgozza fel újra azt, ami már kész van.

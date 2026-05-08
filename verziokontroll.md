@@ -14,6 +14,7 @@ Ez a dokumentum követi a projekt mérföldköveit és fejlesztési szakaszait.
 
 | Verzió | Sorszám | Dátum | Commit üzenet |
 |:------ |:------- |:----- |:------------- |
+| V1.2   | #8      | 2026.05.08 | Tesztterv kiegészítése a futtatandó paranccsal. |
 | V1.2   | #7      | 2026.05.08 | Tesztnapló sablon frissítése és átnevezése V1.2_C6-ra. |
 | V1.2   | #6      | 2026.05.08 | Tesztnapló külön fájlba mozgatása (V1.2_C5). |
 | V1.2   | #5      | 2026.05.08 | Tesztterv bővítése tesztelési naplóval. |
