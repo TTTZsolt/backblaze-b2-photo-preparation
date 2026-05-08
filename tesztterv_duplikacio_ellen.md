@@ -57,14 +57,3 @@ Ez a dokumentum leírja azokat a teszteseteket, amelyekkel igazolható, hogy a r
 Ha minden teszteset a várt eredményt hozza, a rendszer duplikációmentesnek tekinthető.
 
 ---
-
-## 4. Tesztelési Napló
-
-Ebben a táblázatban rögzítheted a lefutott teszteket és azok eredményeit.
-
-| Dátum | Verzió | Teszteset (ID) | Művelet / Megjegyzés | Eredmény (OK/Hiba) |
-|:------|:-------|:---------------|:---------------------|:-------------------|
-| 2026.05.08 | V1.2 | T1, T2 | Első futtatás 2007-es képekkel | OK |
-| 2026.05.08 | V1.2 | T1, T2 | Ismételt futtatás (duplikáció ellenőrzés) | OK |
-| | | | | |
-| | | | | |
