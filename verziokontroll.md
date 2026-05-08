@@ -8,12 +8,14 @@ Ez a dokumentum követi a projekt mérföldköveit és fejlesztési szakaszait.
 
 # Verziótörténet
 
+- **V1.4** (2026.05.08): Teljes szinkronizáció helyreállítása (110/110 mappa), bélyegkép-ellenőrzés integrálása a check_sync-be és a README v1.4-es frissítése.
 - **V1.2** (2026.05.08): Thumbnail generálás integrálása, B2 életciklus automatizálás és hibajavítások (duplikációk és rekurzió elleni védelem).
 
 ## # Commit-ok
 
 | Verzió | Sorszám | Dátum | Commit üzenet |
 |:------ |:------- |:----- |:------------- |
+| V1.4   | #1      | 2026.05.08 | Teljes szinkronizáció helyreállítása, bélyegkép-kezelés és ellenőrzés bővítése. |
 | V1.2   | #8      | 2026.05.08 | Tesztterv kiegészítése a futtatandó paranccsal. |
 | V1.2   | #7      | 2026.05.08 | Tesztnapló sablon frissítése és átnevezése V1.2_C6-ra. |
 | V1.2   | #6      | 2026.05.08 | Tesztnapló külön fájlba mozgatása (V1.2_C5). |

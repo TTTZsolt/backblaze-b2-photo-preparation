@@ -1,5 +1,11 @@
 *.gslides
+*.gsheet
+*.gdoc
+*.gdraw
 *.patch
 test_images/
+temp_thumb_work/
 __pycache__/
 *.pyc
+processed_logs.csv
+*.txt

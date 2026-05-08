@@ -59,12 +59,19 @@ def prepare_b2_upload():
         if target_dir_name in subdir or "kepek02" in subdir or thumb_dir_name in subdir:
             continue
 
-        # 1. Először megkeressük a mappában az összes "-szerkesztve" végű fájlt
+        print(f"Mappa feldolgozasa: {os.path.relpath(subdir, root_dir)}...", flush=True)
+
+        # 1. Először megkeressük a mappában az összes szerkesztett fájlt
+        # Támogatott végződések: "-szerkesztve" és "-szerkesztett"
         edited_bases = set()
         for f in files:
             name, ext = os.path.splitext(f)
-            if name.lower().endswith("-szerkesztve"):
-                base = name.lower()[:-12] # "-szerkesztve" levágása
+            l_name = name.lower()
+            if l_name.endswith("-szerkesztve"):
+                base = l_name[:-12] # "-szerkesztve" levágása
+                edited_bases.add(base)
+            elif l_name.endswith("-szerkesztett"):
+                base = l_name[:-13] # "-szerkesztett" levágása
                 edited_bases.add(base)
 
         for filename in files:
@@ -120,24 +127,20 @@ def prepare_b2_upload():
 
                 processed_count += 1
 
-                # Ha a nagy kép már megvan, mindent átugrunk
-                if os.path.exists(final_target_path):
-                    print(f"Atugorva (mar letezik): {os.path.join(clean_relative_path, new_filename)}")
-                    continue
+                # Csak akkor ugorjuk át teljesen, ha a nagy kép ÉS a thumbnail is megvan már
+                if os.path.exists(final_target_path) and os.path.exists(final_thumb_path):
+                    # Kicsit korrigáljuk a final_thumb_path kiterjesztését az ellenőrzéshez, 
+                    # mert a thumbnail mindig .jpg lesz
+                    actual_thumb_path = final_thumb_path
+                    if not actual_thumb_path.lower().endswith(('.jpg', '.jpeg')):
+                        actual_thumb_path = os.path.splitext(final_thumb_path)[0] + ".jpg"
+                    
+                    if os.path.exists(actual_thumb_path):
+                        continue
                 
                 new_count += 1
                 
-                # Ütközéskezelés (bár a mappastruktúra miatt ritkább, de lehetséges)
-                # Ha véletlenül két fájl neve tisztítva ugyanaz lenne ugyanabban a mappában
-                counter = 1
-                base_target_path = final_target_path
-                while os.path.exists(final_target_path):
-                     # Ez a ciklus technikailag az előző "skip" miatt nem fut le jelen formában,
-                     # de meghagyjuk a logikát arra az esetre, ha a jövőben változtatnánk a "skip" szabályon.
-                     # Jelenleg a "skip" erősebb.
-                     pass 
-                     # (A fenti skip miatt ez a rész most nem releváns, de a robusztusság kedvéért
-                     #  kivehetjük a skip-et, ha felülírást vagy verziózást akarunk. Most marad a skip.)
+                # Fájl másolása vagy konvertálása ÉS Thumbnail készítés
 
                 # Fájl másolása vagy konvertálása ÉS Thumbnail készítés
                 try:
@@ -151,7 +154,7 @@ def prepare_b2_upload():
                             print(f"Konvertalva es masolva (HEIC->JPG): {os.path.join(clean_relative_path, new_filename)}")
                         else:
                             shutil.copy2(old_path, final_target_path)
-                            print(f"Masolva: {os.path.join(clean_relative_path, new_filename)}")
+                            # print(f"Masolva: {os.path.join(clean_relative_path, new_filename)}")
                     else:
                         # Ha a nagy kép már megvan, csak csendben nyugtázzuk
                         pass
@@ -177,7 +180,7 @@ def prepare_b2_upload():
                             if img.mode in ("RGBA", "P"):
                                 img = img.convert("RGB")
                             img.save(final_thumb_path, "JPEG", quality=75, optimize=True)
-                            print(f"  -> Thumbnail elkeszitve: {os.path.basename(final_thumb_path)}")
+                            # print(f"  -> Thumbnail elkeszitve: {os.path.basename(final_thumb_path)}")
                 except Exception as e:
                     print(f"Hiba a fajl feldolgozasa soran ({filename}): {e}")
             else:
@@ -194,8 +197,8 @@ def prepare_b2_upload():
     try:
         # A. Eredeti képek feltöltése
         print(f"1. Nagy kepek feltoltese...")
-        # A -v (verbose) kiírja a fájlneveket, a -P mutatja a haladást
-        cmd_main = ["rclone", "copy", target_dir_root, remote_target, "-v", "-P", "--update"]
+        # A -q (quiet) elrejti az egyedi fájlneveket, a -P mutatja a haladást
+        cmd_main = ["rclone", "copy", target_dir_root, remote_target, "-q", "-P", "--update"]
         subprocess.run(cmd_main, check=True)
         
         # B. Thumbnail-ek feltöltése
