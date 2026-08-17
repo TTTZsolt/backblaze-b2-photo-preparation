@@ -35,14 +35,29 @@ Egy Takeout-fájl (kép vagy videó) az alábbi információkkal rendelkezik:
 
 ### 2.1 Album-mappanév felismerése
 
-A szülőmappa nevét két mintával próbáljuk illeszteni:
+A szülőmappa nevét négy mintával próbáljuk illeszteni (a dátumrészek
+elválasztója lehet `_` vagy `-` is — a Google Takeout ZIP-enként eltérően
+használja a kettőt):
 
-- **Napos minta**: `ÉÉÉÉ_HH_NN Esemény neve` (pl. `2012_09_08 Asztalhoz emberek koncert`)
+- **Napos minta**: `ÉÉÉÉ_HH_NN Esemény neve` / `ÉÉÉÉ-HH-NN Esemény neve`
+  (pl. `2012_09_08 Asztalhoz emberek koncert`, `2017-12-29 Julcsi szalagavató`)
   → kinyert mezők: album_év, album_hónap, album_nap, esemény_szöveg
+- **Hónapos minta**: `ÉÉÉÉ_HH Esemény neve` / `ÉÉÉÉ-HH Esemény neve`
+  (pl. `2017-06 Dűne Fro`, `2016-07 Görögország`)
+  → kinyert mezők: album_év, album_hónap, esemény_szöveg (a nap az
+  album-névben nincs benne, a célútvonal nap-mezője ilyen album esetén is
+  mindig az EXIF-ből jön, l. 2.2)
 - **Év-szintű minta**: `ÉÉÉÉ Esemény neve` (pl. `2012 Állatok`), **kivéve** ha az
   "Esemény neve" rész generikus gyűjtőmappára utaló szót tartalmaz
   (`fotói`, `photos`, `videói`, `videoi`) — ezek NEM számítanak névvel
   ellátott albumnak, hanem az általános gyűjtőmappák.
+- **Dátum-előtag nélküli, szöveges minta**: a mappanév maga az esemény
+  szövege, évszám-előtag nélkül (pl. `karácsony`) → kinyert mező:
+  esemény_szöveg. Ilyenkor is mindig az EXIF adja az év/hónap/nap
+  mezőket (l. 2.2). **Kivétel** (ezek NEM számítanak névvel ellátott
+  albumnak): a puszta számjegyekből álló mappanév (pl. `2015`), és az
+  `@` karaktert tartalmazó mappanév (más Google-fiókból megosztott/
+  importált album jele, pl. `11Titkár, valaki@gmail.com`).
 
 Ha egy fájlnak **több** Takeout-beli előfordulása is van (mert több albumban
 is szerepel, az általános gyűjtőmappán kívül), és **legalább egyik** ilyen
@@ -106,6 +121,17 @@ Azonos a `prepare_photos.py` `clean_string()` függvényével:
 - Az album-mappanév mintaillesztése (2.1) nem ismer fel minden lehetséges
   elnevezési konvenciót — ha a jövőben új album-elnevezési formátum
   jelenik meg, a mintákat bővíteni kell.
+  - 2026-08-16: a teljes Takeout-állomány átvizsgálásával talált,
+    korábban fel nem ismert mappanév-típusok — döntés született mindről:
+    - dátum-előtag nélküli, tisztán szöveges albumnév (pl. `karácsony`,
+      58 fájl a teszt-ZIP-ekben) — **implementálva** a fenti negyedik
+      (szöveges) mintaként.
+    - megosztott (más Google-fiókból importált) album mappaneve
+      (`11Titkár, tuskecsaladikepek@gmail.com`, 9 fájl) — **szándékosan
+      figyelmen kívül hagyva** (nem kezeljük albumként), mert a mappanév
+      technikai/fiók-azonosító jellegű, nem valódi esemény-név.
+    - puszta évszám, esemény-szöveg nélkül (`2015`, 1 fájl) — **szándékosan
+      figyelmen kívül hagyva**, elhanyagolható méretű egyedi eset.
 
 ---
 
