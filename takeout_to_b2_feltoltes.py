@@ -64,6 +64,14 @@ GENERIC_WORDS = ("fotói", "fotoi", "photos", "videói", "videoi")
 # emberi javitas eredmenye, az eredeti feleslegesse valik.
 EDITED_SUFFIX_RE = re.compile(r"^(.*)-(edited|szerkesztve|szerkesztett)(\(\d+\))?$", re.IGNORECASE)
 
+# Fajlnevbol datum kiolvasasahoz - a leggyakoribb kamera/telefon konvenciok
+# (pl. "IMG_20211224_181930.jpg", "20210805-125932.jpg"). Csak akkor hasznaljuk
+# vegso soron, ha sem EXIF, sem a Takeout JSON-melleklet nem ad datumot - ez
+# jobb, mint a ZIP-beli fajl-idobelyeg, ami a Takeout-export csomagolasi
+# idejet tukrozi, nem a kep tenyleges keszitesi datumat.
+FILENAME_DATETIME_RE = re.compile(r"(\d{4})(\d{2})(\d{2})[_-](\d{2})(\d{2})(\d{2})")
+FILENAME_DATE_RE = re.compile(r"(\d{4})-(\d{2})-(\d{2})")
+
 
 def strip_edited_suffix(base_name):
     """Ha a fajlnev (kiterjesztes nelkul) szerkesztett-jelzovel vegzodik,
@@ -128,6 +136,57 @@ def get_exif_date(image_bytes):
                         continue
     except Exception:
         pass
+    return None
+
+
+def get_json_metadata_date(zf, internal_path):
+    """A Google Takeout az eredeti felvetel idejet egy melle-fajl JSON-ban
+    tarolja (pl. 'kep.jpg.json' vagy ujabban 'kep.jpg.supplemental-metadata.json'),
+    a "photoTakenTime" unix idobelyegkent. Ez akkor is megbizhato, ha a kep
+    sajat EXIF-je hianyzik vagy serult (pl. Google Photos altal szerkesztett
+    valtozatoknal gyakori)."""
+    for suffix in (".supplemental-metadata.json", ".json"):
+        candidate = internal_path + suffix
+        try:
+            raw = zf.read(candidate)
+        except KeyError:
+            continue
+        try:
+            meta = json.loads(raw)
+            ts = meta.get("photoTakenTime", {}).get("timestamp")
+            if ts:
+                return datetime.fromtimestamp(int(ts))
+        except Exception:
+            continue
+    return None
+
+
+def parse_date_from_filename(filename):
+    """Utolso esely a datum kitalalasara, mielott a ZIP-beli (a Takeout-export
+    csomagolasi idejet tukrozo, megbizhatatlan) fajl-idobelyeghez nyulnank -
+    a leggyakoribb kamera/telefon fajlnev-konvenciokat probalja (pl.
+    "IMG_20211224_181930.jpg", "20210805-125932.jpg")."""
+    base = os.path.splitext(os.path.basename(filename))[0]
+    current_year = datetime.now().year
+
+    m = FILENAME_DATETIME_RE.search(base)
+    if m:
+        try:
+            y, mo, d, h, mi, s = (int(g) for g in m.groups())
+            if 1995 <= y <= current_year + 1:
+                return datetime(y, mo, d, h, mi, s)
+        except ValueError:
+            pass
+
+    m = FILENAME_DATE_RE.search(base)
+    if m:
+        try:
+            y, mo, d = (int(g) for g in m.groups())
+            if 1995 <= y <= current_year + 1:
+                return datetime(y, mo, d)
+        except ValueError:
+            pass
+
     return None
 
 
@@ -374,8 +433,17 @@ def process_zip(zip_path, dry_run=True):
             # Csak most olvassuk vissza a bajtokat (a valasztott peldanyt)
             info = zf.getinfo(chosen_internal)
             data = zf.read(info)
-            exif_date = get_exif_date(data)
-            effective_date = exif_date or datetime(*info.date_time)
+            # Prioritas: EXIF -> Takeout JSON-melleklet (photoTakenTime) ->
+            # fajlnevbol kiolvasott datum -> vegso esetben a ZIP-beli fajl-
+            # idobelyeg (ami a Takeout-export csomagolasi idejet tukrozi,
+            # NEM a kep tenyleges keszitesi datumat - lasd a fenti fuggvenyek
+            # dokumentaciojat).
+            effective_date = (
+                get_exif_date(data)
+                or get_json_metadata_date(zf, chosen_internal)
+                or parse_date_from_filename(chosen_filename)
+                or datetime(*info.date_time)
+            )
 
             b2_key = compute_b2_key(effective_date, chosen_album_match, chosen_filename)
             to_upload += 1

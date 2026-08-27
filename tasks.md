@@ -123,3 +123,4 @@ mely Takeout ZIP-ek hiányoznak legnagyobb arányban a B2-ről — ez alapján
   tesztelt szabály nem magyaráz (feltehetően emberi elgépelés/tévedés a
   kézi rendezés során) — ezekkel nem foglalkozunk visszamenőleg, csak az
   új feltöltéseknél alkalmazzuk a specifikációt.
+De lehet írni
