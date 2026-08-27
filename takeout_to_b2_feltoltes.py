@@ -56,6 +56,23 @@ MONTH_ALBUM_RE = re.compile(r"^(\d{4})[_-](\d{2})[ _](.+)$")
 YEAR_ALBUM_RE = re.compile(r"^(\d{4})[ _](.+)$")
 GENERIC_WORDS = ("fotói", "fotoi", "photos", "videói", "videoi")
 
+# Google Photos jelzi a szerkesztett (pl. levágott, retusált) valtozatot egy
+# nyelvfuggo utotaggal a fajlnevben - a fioknyelvtol fuggoen "-edited",
+# "-szerkesztve" vagy "-szerkesztett" lehet, esetenkent "(1)" tipusu Takeout
+# duplikacio-jelzovel a vegen. Ha egy adott mappaban mind az eredeti, mind a
+# szerkesztett valtozat megvan, csak a szerkesztettet toltjuk fel - az az
+# emberi javitas eredmenye, az eredeti feleslegesse valik.
+EDITED_SUFFIX_RE = re.compile(r"^(.*)-(edited|szerkesztve|szerkesztett)(\(\d+\))?$", re.IGNORECASE)
+
+
+def strip_edited_suffix(base_name):
+    """Ha a fajlnev (kiterjesztes nelkul) szerkesztett-jelzovel vegzodik,
+    visszaadja az (alap_nev, True) part, kulonben (base_name, False)."""
+    m = EDITED_SUFFIX_RE.match(base_name)
+    if m:
+        return m.group(1), True
+    return base_name, False
+
 
 # ---------------------------------------------------------------------------
 # Kozos segedfuggvenyek (azonosak a sort_by_date.py / prepare_photos.py -val)
@@ -178,7 +195,7 @@ def create_thumbnail_bytes(image_bytes):
 def load_existing_b2_sha1(remote):
     print(f"Meglévő B2-tartalom SHA1-listájának lekérése ({remote})...", flush=True)
     cmd = ["rclone", "lsjson", "--hash", "--recursive", remote]
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    result = subprocess.run(cmd, capture_output=True, text=True, creationflags=subprocess.CREATE_NO_WINDOW)
     if result.returncode != 0:
         print("HIBA az rclone lsjson futtatása során:", flush=True)
         print(result.stderr, flush=True)
@@ -192,7 +209,7 @@ def load_existing_b2_sha1(remote):
 
 def rclone_upload_bytes(data: bytes, remote_path: str):
     cmd = ["rclone", "rcat", remote_path]
-    result = subprocess.run(cmd, input=data, capture_output=True)
+    result = subprocess.run(cmd, input=data, capture_output=True, creationflags=subprocess.CREATE_NO_WINDOW)
     if result.returncode != 0:
         print(f"  [Feltöltési hiba] {remote_path}: "
               f"{result.stderr.decode('utf-8', errors='replace')}", flush=True)
@@ -250,14 +267,41 @@ def process_zip(zip_path, dry_run=True):
     total_entries = 0
     video_skipped = 0
 
+    edited_originals_skipped = 0
+
     with zipfile.ZipFile(zip_path) as zf:
         infolist = [i for i in zf.infolist() if not i.is_dir()]
+
+        # Elozetes fajlnev-alapu vizsgalat (tartalom-olvasas nelkul): mely
+        # (mappa, alapnev, kiterjesztes) parokhoz letezik szerkesztett valtozat
+        # ugyanabban a mappaban.
+        edited_present = set()
+        for info in infolist:
+            ext = os.path.splitext(info.filename)[1].lower()
+            if ext not in IMAGE_EXTENSIONS:
+                continue
+            directory = os.path.dirname(info.filename.replace("\\", "/"))
+            base_name = os.path.splitext(os.path.basename(info.filename))[0]
+            core_base, is_edited = strip_edited_suffix(base_name)
+            if is_edited:
+                edited_present.add((directory, core_base.lower(), ext))
+
         for idx, info in enumerate(infolist, 1):
             ext = os.path.splitext(info.filename)[1].lower()
             if ext in VIDEO_EXTENSIONS:
                 video_skipped += 1
                 continue
             if ext not in IMAGE_EXTENSIONS:
+                continue
+
+            directory = os.path.dirname(info.filename.replace("\\", "/"))
+            base_name = os.path.splitext(os.path.basename(info.filename))[0]
+            core_base, is_edited = strip_edited_suffix(base_name)
+            if not is_edited and (directory, core_base.lower(), ext) in edited_present:
+                # Van szerkesztett valtozat ugyanebben a mappaban - az eredetit
+                # kihagyjuk, csak a javitott (szerkesztett) valtozat megy be a B2-be.
+                edited_originals_skipped += 1
+                print(f"  [KIHAGYVA - van szerkesztett változat] {info.filename}", flush=True)
                 continue
 
             try:
@@ -277,7 +321,16 @@ def process_zip(zip_path, dry_run=True):
                 print(f"  ... {idx}/{len(infolist)} bejegyzés átnézve", flush=True)
 
         print(f"Indexelés kész: {total_entries} kép, {video_skipped} videó kihagyva "
-              f"(nem támogatott), {len(by_hash)} egyedi tartalom.", flush=True)
+              f"(nem támogatott), {edited_originals_skipped} eredeti kihagyva (van szerkesztett "
+              f"változat), {len(by_hash)} egyedi tartalom.", flush=True)
+
+        # Elozetes szamolas, hogy a feltoltesi ciklus alatt egy stabil "X/Y"
+        # szamlalot tudjunk mutatni - a tenylegesen feltoltendo (meg nem
+        # letezo, nem szandekosan torolt) tartalmak darabszama.
+        total_to_upload = sum(
+            1 for sha1 in by_hash if sha1 not in existing_sha1 and sha1 not in deleted_sha1
+        )
+        print(f"Ténylegesen feltöltendő (még nincs fent): {total_to_upload} db", flush=True)
 
         # --- 2. lepes: dontes + feltoltes ---
         print("\n--- 2. lépés: célútvonal-számítás és feltöltés ---", flush=True)
@@ -332,7 +385,7 @@ def process_zip(zip_path, dry_run=True):
                     "takeout_utvonal": chosen_internal, "sha1": sha1,
                     "statusz": "feltoltesre-kerulne", "cel_utvonal": b2_key,
                 })
-                print(f"  [DRY-RUN] {chosen_internal}  ->  {TARGET_BUCKET}/{b2_key}", flush=True)
+                print(f"  [{to_upload}/{total_to_upload}] [DRY-RUN] {chosen_internal}  ->  {TARGET_BUCKET}/{b2_key}", flush=True)
                 continue
 
             # HEIC -> JPG konverzio, ha kell
@@ -350,36 +403,55 @@ def process_zip(zip_path, dry_run=True):
 
             if ok_main and ok_thumb:
                 uploaded_ok += 1
-                print(f"  [OK] {chosen_internal}  ->  {TARGET_BUCKET}/{b2_key}", flush=True)
+                print(f"  [{to_upload}/{total_to_upload}] [OK] {chosen_internal}  ->  {TARGET_BUCKET}/{b2_key}", flush=True)
                 plan_rows.append({
                     "takeout_utvonal": chosen_internal, "sha1": sha1,
                     "statusz": "feltoltve", "cel_utvonal": b2_key,
                 })
             else:
                 upload_failed += 1
+                print(f"  [{to_upload}/{total_to_upload}] [HIBA] {chosen_internal}  ->  {TARGET_BUCKET}/{b2_key}", flush=True)
                 plan_rows.append({
                     "takeout_utvonal": chosen_internal, "sha1": sha1,
                     "statusz": "feltoltesi-hiba", "cel_utvonal": b2_key,
                 })
 
     # --- Osszefoglalo + naplo CSV ---
+    # A mappa egy elo Google Drive szinkron ala tartozik, ami uj fajlok
+    # letrehozasakor néha rovid ideig zarolja azokat (ugyanaz a jelenseg,
+    # mint a git packed-refs.lock hibaja ebben a repoban) - ezert nehany
+    # ujraprobalkozassal irjuk ki, hogy egy atmeneti zarolas ne szakitsa
+    # meg a mar elvegzett munkat (feltoltes/dry-run terv) csak a naplo miatt.
+    import time
     zip_basename = os.path.splitext(os.path.basename(zip_path))[0]
     out_dir = os.path.dirname(os.path.abspath(__file__))
     plan_csv = os.path.join(out_dir, f"feltoltes_terv_{zip_basename}.csv")
-    with open(plan_csv, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=["takeout_utvonal", "sha1", "statusz", "cel_utvonal"])
-        writer.writeheader()
-        writer.writerows(plan_rows)
+    for attempt in range(1, 6):
+        try:
+            with open(plan_csv, "w", newline="", encoding="utf-8") as f:
+                writer = csv.DictWriter(f, fieldnames=["takeout_utvonal", "sha1", "statusz", "cel_utvonal"])
+                writer.writeheader()
+                writer.writerows(plan_rows)
+            break
+        except PermissionError as e:
+            if attempt == 5:
+                print(f"\nFIGYELMEZTETES: a naplo CSV irasa {attempt} probalkozas utan is "
+                      f"sikertelen (feltehetoen atmeneti Google Drive zarolas): {e}", flush=True)
+                plan_csv = None
+            else:
+                print(f"  [Ujraprobalkozas {attempt}/5] Naplo CSV zarolva, varok 1 mp-et...", flush=True)
+                time.sleep(1)
 
     print("\n--- KÉSZ ---", flush=True)
     print(f"Egyedi tartalom összesen: {len(by_hash)}", flush=True)
+    print(f"Eredeti kihagyva (van szerkesztett változat): {edited_originals_skipped}", flush=True)
     print(f"Már fent volt (kihagyva): {already_exists}", flush=True)
     print(f"Szándékosan korábban törölve (kihagyva): {deliberately_skipped}", flush=True)
     print(f"Feltöltésre szánt: {to_upload}", flush=True)
     if not dry_run:
         print(f"Sikeresen feltöltve: {uploaded_ok}", flush=True)
         print(f"Feltöltési hiba: {upload_failed}", flush=True)
-    print(f"Napló mentve: {plan_csv}", flush=True)
+    print(f"Napló mentve: {plan_csv}" if plan_csv else "Napló NEM mentődött (lásd fenti figyelmeztetés).", flush=True)
 
 
 if __name__ == "__main__":
