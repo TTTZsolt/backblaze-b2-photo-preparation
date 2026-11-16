@@ -10,6 +10,21 @@ mappastruktúrába rendezve.
 * **Python 3.x** telepítése.
 * **Szükséges könyvtárak:** `pip install Pillow pillow-heif`.
 * **Rclone:** telepítve és konfigurálva `b2_storage` néven a Backblaze B2-höz.
+  A remote neve minden gépen ugyanaz legyen; az rclone-konfiguráció gépenként
+  külön van (titkos kulcsokat tartalmaz, ne kerüljön a Drive-ra).
+
+### Új gép beállítása (egyszeri)
+
+1. Python telepítése, majd a `Takeout_B2_Telepites.bat` futtatása (Pillow, pillow-heif).
+2. rclone telepítése, `rclone config`: Backblaze B2, név: `b2_storage`.
+3. `Takeout_B2_Feltolto_Inditasa.bat` indítása. A program induláskor
+   ellenőrzi a környezetet, és magyarul kiírja, ha valami hiányzik.
+
+### Takeout ZIP-ek helye
+
+A ZIP-ek a NAS-on vannak: `X:\Pictures\takeout\<év>\`. A fájlválasztó az
+utoljára használt mappában nyílik meg (gépenként tárolva), ennek hiányában
+az `X:\Pictures\takeout\` mappában. Bármilyen más útvonalról is választható ZIP.
 
 ---
 

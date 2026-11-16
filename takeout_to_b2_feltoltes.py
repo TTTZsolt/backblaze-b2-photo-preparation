@@ -35,8 +35,11 @@ import pillow_heif
 
 pillow_heif.register_heif_opener()
 
-sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+# Csak valódi konzol-stream esetén: a GUI a saját naplóírójával cseréli a stdout-ot,
+# pythonw alatt pedig a stdout None is lehet.
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8", errors="replace")
 
 # ---------------------------------------------------------------------------
 # Beallitasok
@@ -46,6 +49,9 @@ B2_REMOTE_PREFIX = "b2_storage"
 TARGET_BUCKET = "Kepek02"
 THUMB_REMOTE = f"{B2_REMOTE_PREFIX}:kepek02-thumbs"
 TARGET_REMOTE = f"{B2_REMOTE_PREFIX}:{TARGET_BUCKET}"
+# A Lumina Lomtara: a lomtarba helyezett kep fizikailag ide koltozik a Kepek02-bol,
+# tombstone csak a Lomtar uritesekor keletkezik. Ezeket sem toltjuk fel ujra.
+TRASH_REMOTE = f"{B2_REMOTE_PREFIX}:torles-elott"
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".heic", ".heif", ".cr2", ".nef"}
 VIDEO_EXTENSIONS = {".mp4", ".mov", ".avi", ".mkv", ".3gp", ".m4v", ".webm"}
@@ -258,7 +264,8 @@ def load_existing_b2_sha1(remote):
     if result.returncode != 0:
         print("HIBA az rclone lsjson futtatása során:", flush=True)
         print(result.stderr, flush=True)
-        return set()
+        # Üres listával folytatni duplikált feltöltést okozna, ezért megállunk.
+        raise RuntimeError("A B2-tartalom SHA1-listája nem kérhető le, a feltöltés leállt.")
     data = json.loads(result.stdout)
     hashes = {(f.get("Hashes") or {}).get("sha1") for f in data}
     hashes.discard(None)
@@ -306,6 +313,59 @@ def load_deleted_sha1_set():
 
 
 # ---------------------------------------------------------------------------
+# Egy fajl feltoltese + naplo (kozos a normal futas es az ujraprobalas kozott)
+# ---------------------------------------------------------------------------
+
+FAILED_STATUS = "feltoltesi-hiba"
+PLAN_FIELDS = ["takeout_utvonal", "sha1", "statusz", "cel_utvonal"]
+
+
+def upload_one(data: bytes, filename: str, b2_key: str) -> bool:
+    """Feltölt egy képet (HEIC -> JPG konverzióval, ha kell) és a bélyegképét.
+    True, ha mindkettő sikerült."""
+    ext = os.path.splitext(filename)[1].lower()
+    if ext in (".heic", ".heif"):
+        upload_bytes = to_jpeg_bytes(Image.open(BytesIO(data)))
+    else:
+        upload_bytes = data
+
+    thumb_bytes = create_thumbnail_bytes(data)
+
+    ok_main = rclone_upload_bytes(upload_bytes, f"{TARGET_REMOTE}/{b2_key}")
+    # Bélyegképet csak sikeres eredeti-feltöltés után töltünk fel, hogy ne
+    # maradjon árva bélyegkép eredeti nélkül.
+    return ok_main and rclone_upload_bytes(thumb_bytes, f"{THUMB_REMOTE}/{b2_key}")
+
+
+def plan_csv_path_for(zip_path):
+    zip_basename = os.path.splitext(os.path.basename(zip_path))[0]
+    out_dir = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(out_dir, f"feltoltes_terv_{zip_basename}.csv")
+
+
+def write_plan_csv(plan_csv, rows):
+    """Kiírja a naplót. A mappa egy élő Google Drive szinkron alá tartozik, ami
+    új fájlok létrehozásakor néha rövid ideig zárolja azokat - ezért néhány
+    újrapróbálkozással írjuk ki, hogy egy átmeneti zárolás ne szakítsa meg a
+    már elvégzett munkát. Visszaadja az útvonalat, vagy None-t, ha nem sikerült."""
+    import time
+    for attempt in range(1, 6):
+        try:
+            with open(plan_csv, "w", newline="", encoding="utf-8") as f:
+                writer = csv.DictWriter(f, fieldnames=PLAN_FIELDS)
+                writer.writeheader()
+                writer.writerows(rows)
+            return plan_csv
+        except PermissionError as e:
+            if attempt == 5:
+                print(f"\nFIGYELMEZTETES: a naplo CSV irasa {attempt} probalkozas utan is "
+                      f"sikertelen (feltehetoen atmeneti Google Drive zarolas): {e}", flush=True)
+                return None
+            print(f"  [Ujraprobalkozas {attempt}/5] Naplo CSV zarolva, varok 1 mp-et...", flush=True)
+            time.sleep(1)
+
+
+# ---------------------------------------------------------------------------
 # Fo folyamat
 # ---------------------------------------------------------------------------
 
@@ -318,6 +378,7 @@ def process_zip(zip_path, dry_run=True):
         return
 
     existing_sha1 = load_existing_b2_sha1(TARGET_REMOTE)
+    trash_sha1 = load_existing_b2_sha1(TRASH_REMOTE)
     deleted_sha1 = load_deleted_sha1_set()
 
     # --- 1. lepes: ZIP tartalmanak indexelese SHA1 szerint ---
@@ -387,7 +448,8 @@ def process_zip(zip_path, dry_run=True):
         # szamlalot tudjunk mutatni - a tenylegesen feltoltendo (meg nem
         # letezo, nem szandekosan torolt) tartalmak darabszama.
         total_to_upload = sum(
-            1 for sha1 in by_hash if sha1 not in existing_sha1 and sha1 not in deleted_sha1
+            1 for sha1 in by_hash
+            if sha1 not in existing_sha1 and sha1 not in trash_sha1 and sha1 not in deleted_sha1
         )
         print(f"Ténylegesen feltöltendő (még nincs fent): {total_to_upload} db", flush=True)
 
@@ -399,6 +461,7 @@ def process_zip(zip_path, dry_run=True):
         uploaded_ok = 0
         upload_failed = 0
         deliberately_skipped = 0
+        in_trash_skipped = 0
 
         for sha1, occurrences in by_hash.items():
             chosen_internal = None
@@ -419,6 +482,15 @@ def process_zip(zip_path, dry_run=True):
                     "takeout_utvonal": chosen_internal, "sha1": sha1,
                     "statusz": "mar-fent-van", "cel_utvonal": "",
                 })
+                continue
+
+            if sha1 in trash_sha1:
+                in_trash_skipped += 1
+                plan_rows.append({
+                    "takeout_utvonal": chosen_internal, "sha1": sha1,
+                    "statusz": "lomtarban-van", "cel_utvonal": "",
+                })
+                print(f"  [KIHAGYVA - a Lomtárban van] {chosen_internal}", flush=True)
                 continue
 
             if sha1 in deleted_sha1:
@@ -456,20 +528,7 @@ def process_zip(zip_path, dry_run=True):
                 print(f"  [{to_upload}/{total_to_upload}] [DRY-RUN] {chosen_internal}  ->  {TARGET_BUCKET}/{b2_key}", flush=True)
                 continue
 
-            # HEIC -> JPG konverzio, ha kell
-            ext = os.path.splitext(chosen_filename)[1].lower()
-            if ext in (".heic", ".heif"):
-                img = Image.open(BytesIO(data))
-                upload_bytes = to_jpeg_bytes(img)
-            else:
-                upload_bytes = data
-
-            thumb_bytes = create_thumbnail_bytes(data)
-
-            ok_main = rclone_upload_bytes(upload_bytes, f"{TARGET_REMOTE}/{b2_key}")
-            ok_thumb = rclone_upload_bytes(thumb_bytes, f"{THUMB_REMOTE}/{b2_key}")
-
-            if ok_main and ok_thumb:
+            if upload_one(data, chosen_filename, b2_key):
                 uploaded_ok += 1
                 print(f"  [{to_upload}/{total_to_upload}] [OK] {chosen_internal}  ->  {TARGET_BUCKET}/{b2_key}", flush=True)
                 plan_rows.append({
@@ -481,7 +540,7 @@ def process_zip(zip_path, dry_run=True):
                 print(f"  [{to_upload}/{total_to_upload}] [HIBA] {chosen_internal}  ->  {TARGET_BUCKET}/{b2_key}", flush=True)
                 plan_rows.append({
                     "takeout_utvonal": chosen_internal, "sha1": sha1,
-                    "statusz": "feltoltesi-hiba", "cel_utvonal": b2_key,
+                    "statusz": FAILED_STATUS, "cel_utvonal": b2_key,
                 })
 
     # --- Osszefoglalo + naplo CSV ---
@@ -490,36 +549,79 @@ def process_zip(zip_path, dry_run=True):
     # mint a git packed-refs.lock hibaja ebben a repoban) - ezert nehany
     # ujraprobalkozassal irjuk ki, hogy egy atmeneti zarolas ne szakitsa
     # meg a mar elvegzett munkat (feltoltes/dry-run terv) csak a naplo miatt.
-    import time
-    zip_basename = os.path.splitext(os.path.basename(zip_path))[0]
-    out_dir = os.path.dirname(os.path.abspath(__file__))
-    plan_csv = os.path.join(out_dir, f"feltoltes_terv_{zip_basename}.csv")
-    for attempt in range(1, 6):
-        try:
-            with open(plan_csv, "w", newline="", encoding="utf-8") as f:
-                writer = csv.DictWriter(f, fieldnames=["takeout_utvonal", "sha1", "statusz", "cel_utvonal"])
-                writer.writeheader()
-                writer.writerows(plan_rows)
-            break
-        except PermissionError as e:
-            if attempt == 5:
-                print(f"\nFIGYELMEZTETES: a naplo CSV irasa {attempt} probalkozas utan is "
-                      f"sikertelen (feltehetoen atmeneti Google Drive zarolas): {e}", flush=True)
-                plan_csv = None
-            else:
-                print(f"  [Ujraprobalkozas {attempt}/5] Naplo CSV zarolva, varok 1 mp-et...", flush=True)
-                time.sleep(1)
+    plan_csv = write_plan_csv(plan_csv_path_for(zip_path), plan_rows)
 
     print("\n--- KÉSZ ---", flush=True)
     print(f"Egyedi tartalom összesen: {len(by_hash)}", flush=True)
     print(f"Eredeti kihagyva (van szerkesztett változat): {edited_originals_skipped}", flush=True)
     print(f"Már fent volt (kihagyva): {already_exists}", flush=True)
+    print(f"A Lomtárban van (kihagyva): {in_trash_skipped}", flush=True)
     print(f"Szándékosan korábban törölve (kihagyva): {deliberately_skipped}", flush=True)
     print(f"Feltöltésre szánt: {to_upload}", flush=True)
     if not dry_run:
         print(f"Sikeresen feltöltve: {uploaded_ok}", flush=True)
         print(f"Feltöltési hiba: {upload_failed}", flush=True)
+        if upload_failed:
+            print("FIGYELEM: néhány kép feltöltése nem sikerült ('feltoltesi-hiba' a naplóban). "
+                  "A 'Hibás fájlok újrapróbálása' gombbal (vagy --retry-failed kapcsolóval) "
+                  "csak ezeket lehet újra megpróbálni.", flush=True)
     print(f"Napló mentve: {plan_csv}" if plan_csv else "Napló NEM mentődött (lásd fenti figyelmeztetés).", flush=True)
+    return plan_csv
+
+
+def count_failed_in_plan(plan_csv):
+    """A naplóban lévő 'feltoltesi-hiba' státuszú sorok száma (0, ha nincs napló)."""
+    if not plan_csv or not os.path.exists(plan_csv):
+        return 0
+    with open(plan_csv, newline="", encoding="utf-8") as f:
+        return sum(1 for row in csv.DictReader(f) if row.get("statusz") == FAILED_STATUS)
+
+
+def retry_failed(zip_path, plan_csv=None):
+    """Csak a napló 'feltoltesi-hiba' sorait próbálja újra feltölteni, ugyanarra
+    a célútvonalra, mint az első körben. Nem kéri le újra a B2 SHA1-listáját és
+    nem indexeli újra a ZIP-et. A naplót helyben frissíti (sikeres sor ->
+    'feltoltve'), így többször is futtatható, amíg el nem fogynak a hibák."""
+    plan_csv = plan_csv or plan_csv_path_for(zip_path)
+    print(f"--- Hibás fájlok újrapróbálása: {zip_path} ---", flush=True)
+    if not os.path.exists(zip_path):
+        print(f"HIBA: nem létezik a fájl: {zip_path}", flush=True)
+        return None
+    if not os.path.exists(plan_csv):
+        print(f"HIBA: nincs napló ehhez a ZIP-hez: {plan_csv}", flush=True)
+        return None
+
+    with open(plan_csv, newline="", encoding="utf-8") as f:
+        rows = list(csv.DictReader(f))
+    failed_rows = [r for r in rows if r.get("statusz") == FAILED_STATUS]
+    total = len(failed_rows)
+    print(f"Újrapróbálandó: {total} db", flush=True)
+    if not total:
+        return plan_csv
+
+    ok_count = 0
+    with zipfile.ZipFile(zip_path) as zf:
+        for idx, row in enumerate(failed_rows, 1):
+            internal = row["takeout_utvonal"]
+            b2_key = row["cel_utvonal"]
+            try:
+                data = zf.read(internal)
+            except Exception as e:
+                print(f"  [{idx}/{total}] [Olvasási hiba] {internal}: {e}", flush=True)
+                continue
+            if upload_one(data, os.path.basename(internal), b2_key):
+                row["statusz"] = "feltoltve"
+                ok_count += 1
+                print(f"  [{idx}/{total}] [OK] {internal}  ->  {TARGET_BUCKET}/{b2_key}", flush=True)
+            else:
+                print(f"  [{idx}/{total}] [HIBA] {internal}  ->  {TARGET_BUCKET}/{b2_key}", flush=True)
+
+    saved = write_plan_csv(plan_csv, rows)
+    print("\n--- ÚJRAPRÓBÁLÁS KÉSZ ---", flush=True)
+    print(f"Sikeresen feltöltve: {ok_count}", flush=True)
+    print(f"Továbbra is hibás: {total - ok_count}", flush=True)
+    print(f"Napló frissítve: {saved}" if saved else "Napló NEM mentődött (lásd fenti figyelmeztetés).", flush=True)
+    return saved
 
 
 if __name__ == "__main__":
@@ -531,5 +633,13 @@ if __name__ == "__main__":
         "--dry-run", action="store_true",
         help="Csak kiírja, mit tenne, ténylegesen nem tölt fel semmit."
     )
+    parser.add_argument(
+        "--retry-failed", action="store_true",
+        help="Csak a korábbi futás naplójában 'feltoltesi-hiba' státuszú fájlokat próbálja újra."
+    )
     args = parser.parse_args()
-    process_zip(args.zip_path.strip().strip('"'), dry_run=args.dry_run)
+    zip_arg = args.zip_path.strip().strip('"')
+    if args.retry_failed:
+        retry_failed(zip_arg)
+    else:
+        process_zip(zip_arg, dry_run=args.dry_run)

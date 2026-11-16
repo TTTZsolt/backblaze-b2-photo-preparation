@@ -1,0 +1,388 @@
+<!doctype html>
+<html lang="hu">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lumina képfeltöltés – áttekintő ábrák</title>
+<style>
+  /* Elrendezés: bal oldalt a helyi gép lépései fentről lefelé, jobb oldalt a Backblaze B2 */
+  :root {
+    --bg: #f6f7f8; --fg: #1d2429; --muted: #5d6a73; --line: #b9c3ca;
+    --lane: #eceff1; --box: #ffffff; --accent: #0a6c74; --warn: #a65a00;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #12171a; --fg: #e4eaed; --muted: #98a6af; --line: #3b484f;
+      --lane: #1a2125; --box: #232c31; --accent: #4fc6d0; --warn: #f0a24a;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #12171a; --fg: #e4eaed; --muted: #98a6af; --line: #3b484f;
+    --lane: #1a2125; --box: #232c31; --accent: #4fc6d0; --warn: #f0a24a;
+    color-scheme: dark;
+  }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font: 15px/1.55 system-ui, "Segoe UI", sans-serif;
+    padding: 24px 16px 40px;
+  }
+  main { max-width: 1040px; margin: 0 auto; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 20px; }
+  figure { margin: 0 0 8px; }
+  .scroll { overflow-x: auto; }
+  svg { display: block; min-width: 760px; width: 100%; height: auto; color: var(--fg); }
+  figcaption { color: var(--muted); font-size: 14px; margin-top: 10px; max-width: 75ch; }
+  .lane { fill: var(--lane); }
+  .lanelbl { fill: var(--muted); font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
+  .box { fill: var(--box); stroke: var(--line); stroke-width: 1.5; }
+  .box.key { stroke: var(--accent); stroke-width: 2.5; }
+  .box.skip { stroke: var(--warn); stroke-width: 2; stroke-dasharray: 5 4; }
+  .t { fill: var(--fg); font-size: 13px; }
+  .t.b { font-weight: 600; }
+  .t.s { fill: var(--muted); font-size: 11.5px; }
+  .t.a { fill: var(--accent); font-weight: 600; }
+  .t.w { fill: var(--warn); font-weight: 600; }
+  .t.m { font-family: ui-monospace, Consolas, monospace; font-size: 13px; }
+  .ln { stroke: var(--fg); stroke-width: 1.8; fill: none; }
+  .ln.acc { stroke: var(--accent); stroke-width: 2.4; }
+  .ln.warn { stroke: var(--warn); stroke-width: 1.8; stroke-dasharray: 5 4; }
+  .al { fill: var(--muted); font-size: 11.5px; }
+  .al.a { fill: var(--accent); font-weight: 600; }
+  .al.w { fill: var(--warn); font-weight: 600; }
+  ul { margin: 0; padding-left: 20px; max-width: 75ch; }
+  li { margin: 4px 0; }
+  code { font: 13px ui-monospace, Consolas, monospace; background: var(--lane); padding: 1px 5px; border-radius: 3px; }
+
+  h2 { font-size: 19px; margin: 44px 0 4px; padding-top: 18px; border-top: 1px solid var(--line); }
+  h3 { font-size: 16px; margin: 28px 0 6px; }
+  nav { display: flex; gap: 16px; flex-wrap: wrap; margin: 0 0 8px; }
+  nav a { color: var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Hogyan kerülnek a fényképek a Lumina Képtárba?</h1>
+  <p class="sub">Két útvonal van: a telefon automatikus feltöltése (folyamatos) és a Google Takeout archívum egyszeri betöltése.</p>
+  <nav>
+    <a href="#telefon">A. Telefonról érkező képek (FolderSync)</a>
+    <a href="#takeout">B. Takeout → Backblaze B2</a>
+  </nav>
+
+  <h2 id="telefon">A. Telefonról érkező képek (FolderSync)</h2>
+  <p class="sub">Forrás: specification.md (12. pont) és user_guide.md (13. pont).</p>
+
+
+  <figure>
+    <div class="scroll">
+    <svg viewBox="0 0 1010 600" role="img"
+         aria-label="A telefon kamera-mappájából a FolderSync a beerkezo B2-vödörbe tölt fel, az incoming_processor 5 percenként vagy azonnali híváskor SHA1-ellenőrzés, dátum szerinti mappa, bélyegkép, feltöltés a kepek02 vödörbe és DB-rekord lépéseken viszi át, majd a kép megjelenik a Luminában.">
+      <defs>
+        <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+          <path d="M0 0 L10 5 L0 10 z" fill="currentColor"/>
+        </marker>
+        <marker id="aa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+          <path d="M0 0 L10 5 L0 10 z" fill="var(--accent)"/>
+        </marker>
+        <marker id="aw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+          <path d="M0 0 L10 5 L0 10 z" fill="var(--warn)"/>
+        </marker>
+      </defs>
+
+      <!-- sávok -->
+      <rect class="lane" x="10" y="10" width="190" height="580" rx="6"/>
+      <rect class="lane" x="225" y="10" width="300" height="580" rx="6"/>
+      <rect class="lane" x="545" y="10" width="455" height="580" rx="6"/>
+      <text class="lanelbl" x="25" y="32">Telefon</text>
+      <text class="lanelbl" x="245" y="32">Backblaze B2 (felhő)</text>
+      <text class="lanelbl" x="565" y="32">Lumina szerver</text>
+
+      <!-- TELEFON -->
+      <rect class="box" x="25" y="50" width="160" height="40" rx="6"/>
+      <text class="t b" x="105" y="75" text-anchor="middle">Kamera-mappa</text>
+      <line class="ln" x1="105" y1="90" x2="105" y2="114" marker-end="url(#ar)"/>
+      <text class="al" x="113" y="106">új kép</text>
+
+      <rect class="box" x="25" y="116" width="160" height="40" rx="6"/>
+      <text class="t b" x="105" y="141" text-anchor="middle">FolderSync app</text>
+      <text class="t s" x="105" y="176" text-anchor="middle">fájlméret-ellenőrzés:</text>
+      <text class="t w" x="105" y="191" text-anchor="middle">KIKAPCSOLVA</text>
+
+      <!-- FolderSync -> beerkezo -->
+      <line class="ln" x1="185" y1="136" x2="243" y2="136" marker-end="url(#ar)"/>
+      <text class="al" x="190" y="128">S3</text>
+
+      <!-- B2 -->
+      <rect class="box" x="245" y="116" width="240" height="40" rx="6"/>
+      <text class="t b" x="365" y="141" text-anchor="middle">beerkezo vödör (bejövő)</text>
+
+      <!-- B2 -> processor -->
+      <line class="ln" x1="485" y1="136" x2="563" y2="136" marker-end="url(#ar)"/>
+      <text class="al" x="494" y="128">letöltés</text>
+
+      <rect class="box" x="245" y="394" width="240" height="40" rx="6"/>
+      <text class="t b" x="365" y="419" text-anchor="middle">kepek02 vödör (végleges)</text>
+
+      <rect class="box skip" x="245" y="460" width="240" height="50" rx="6"/>
+      <text class="t b" x="365" y="481" text-anchor="middle">beerkezo: azonos nevű</text>
+      <text class="t b" x="365" y="498" text-anchor="middle">0 bájtos helyjelölő</text>
+
+      <!-- SZERVER: indítók -->
+      <rect class="box" x="565" y="50" width="210" height="40" rx="6"/>
+      <text class="t b" x="670" y="75" text-anchor="middle">Időzítő: 5 percenként</text>
+
+      <rect class="box" x="810" y="50" width="180" height="40" rx="6"/>
+      <text class="t b" x="900" y="68" text-anchor="middle">azonnal:</text>
+      <text class="t s" x="900" y="83" text-anchor="middle">POST /api/incoming/process-now</text>
+
+      <line class="ln" x1="670" y1="90" x2="670" y2="114" marker-end="url(#ar)"/>
+      <path class="ln" d="M900 90 V136 H777" marker-end="url(#ar)"/>
+
+      <!-- SZERVER: lépések (incoming_processor.py) -->
+      <rect class="box" x="565" y="116" width="210" height="40" rx="6"/>
+      <text class="t b" x="670" y="141" text-anchor="middle">SHA1 kiszámítása</text>
+
+      <line class="ln" x1="670" y1="156" x2="670" y2="180" marker-end="url(#ar)"/>
+
+      <rect class="box key" x="565" y="182" width="210" height="52" rx="6"/>
+      <text class="t a" x="670" y="204" text-anchor="middle">Már fent van, vagy</text>
+      <text class="t a" x="670" y="221" text-anchor="middle">korábban törölték?</text>
+
+      <line class="ln warn" x1="775" y1="208" x2="808" y2="208" marker-end="url(#aw)"/>
+      <text class="al w" x="778" y="200">igen</text>
+      <rect class="box skip" x="810" y="188" width="180" height="40" rx="6"/>
+      <text class="t b" x="900" y="206" text-anchor="middle">Kihagyás</text>
+      <text class="t s" x="900" y="221" text-anchor="middle">(duplikátum / tombstone)</text>
+
+      <line class="ln acc" x1="670" y1="234" x2="670" y2="260" marker-end="url(#aa)"/>
+      <text class="al a" x="680" y="252">nem, új kép</text>
+
+      <rect class="box" x="565" y="262" width="210" height="40" rx="6"/>
+      <text class="t b" x="670" y="287" text-anchor="middle">EXIF-dátum → Év/Hónap</text>
+
+      <line class="ln" x1="670" y1="302" x2="670" y2="326" marker-end="url(#ar)"/>
+
+      <rect class="box" x="565" y="328" width="210" height="40" rx="6"/>
+      <text class="t b" x="670" y="353" text-anchor="middle">Bélyegkép generálása</text>
+
+      <line class="ln" x1="670" y1="368" x2="670" y2="392" marker-end="url(#ar)"/>
+
+      <rect class="box" x="565" y="394" width="210" height="40" rx="6"/>
+      <text class="t b" x="670" y="419" text-anchor="middle">Feltöltés kepek02-be</text>
+      <line class="ln" x1="565" y1="414" x2="487" y2="414" marker-end="url(#ar)"/>
+      <text class="al" x="510" y="406">Év/Hónap/</text>
+
+      <line class="ln" x1="670" y1="434" x2="670" y2="458" marker-end="url(#ar)"/>
+
+      <rect class="box" x="565" y="460" width="210" height="40" rx="6"/>
+      <text class="t b" x="670" y="485" text-anchor="middle">DB-rekord létrehozása</text>
+      <line class="ln dash" x1="565" y1="485" x2="487" y2="485" marker-end="url(#ar)"/>
+      <text class="al" x="500" y="477">lecseréli</text>
+
+      <line class="ln acc" x1="670" y1="500" x2="670" y2="524" marker-end="url(#aa)"/>
+
+      <rect class="box key" x="565" y="526" width="425" height="46" rx="6"/>
+      <text class="t a" x="777" y="547" text-anchor="middle">A kép és a bélyegképe megjelenik a Luminában</text>
+      <text class="t s" x="777" y="563" text-anchor="middle">kézi Sync nélkül</text>
+
+      <!-- belső keret a processorhoz -->
+      <text class="al" x="780" y="300">incoming_processor.py</text>
+    </svg>
+    </div>
+    <figcaption>
+      1. ábra: a kép a telefonról a <code>beerkezo</code> vödörbe érkezik, onnan a szerver 5 percenként (vagy kérésre azonnal) átviszi a végleges <code>kepek02</code> vödörbe. A fordulópont az SHA1-ellenőrzés: ami már fent van vagy tudatosan törölt volt, az nem kerül be. A feldolgozott fájl helyén 0 bájtos helyjelölő marad, hogy a FolderSync ne töltse fel újra.
+    </figcaption>
+  </figure>
+
+  <h3>Amit érdemes tudni</h3>
+  <ul>
+    <li><strong>FolderSync beállítás:</strong> a fájlméret-ellenőrzést ki kell kapcsolni, különben a 0 bájtos helyjelölő miatt újra feltöltené a képet (részletek: <code>android_auto_feltoltes/folder_sync_setup_utmutato.md</code>).</li>
+    <li><strong>Gyors ellenőrzés:</strong> <code>GET /api/media/check-sha1/{sha1}</code> megmondja, hogy egy tartalom már fent van-e, vagy korábban törölték.</li>
+    <li><strong>Fekete vagy üres bélyegkép:</strong> egy teljes B2-szinkron a végén újragenerálja a hiányzó bélyegképeket.</li>
+  </ul>
+
+
+  <h2 id="takeout">B. Takeout → Backblaze B2</h2>
+  <p class="sub">Forrás: a „Fénykép előkészítés BlackBlaze-be másolás” projekt (README.md, mappazasi_algoritmus_specifikacio.md, takeout_to_b2_feltoltes.py, takeout_b2_atalakitasi_logika.md).</p>
+
+
+  <!-- 1. ábra: a teljes folyamat -->
+  <figure>
+    <div class="scroll">
+    <svg viewBox="0 0 1010 670" role="img"
+         aria-label="A takeout_to_b2_feltoltes.py a Takeout ZIP képeit szűri, kihagyja az eredetit ha van szerkesztett változat, kihagyja ami SHA1 alapján már fent van vagy tudatosan törölt, kiszámolja a célútvonalat, HEIC-et JPG-re konvertál, bélyegképet készít, majd rclone rcat-tal közvetlenül a ZIP-ből streameli a Kepek02 és kepek02-thumbs vödörbe, és CSV naplót ír.">
+      <defs>
+        <marker id="bar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+          <path d="M0 0 L10 5 L0 10 z" fill="currentColor"/>
+        </marker>
+        <marker id="baa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+          <path d="M0 0 L10 5 L0 10 z" fill="var(--accent)"/>
+        </marker>
+        <marker id="baw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+          <path d="M0 0 L10 5 L0 10 z" fill="var(--warn)"/>
+        </marker>
+      </defs>
+
+      <rect class="lane" x="10" y="10" width="650" height="650" rx="6"/>
+      <rect class="lane" x="690" y="10" width="310" height="650" rx="6"/>
+      <text class="lanelbl" x="25" y="30">Helyi gép: takeout_to_b2_feltoltes.py</text>
+      <text class="lanelbl" x="705" y="30">Backblaze B2 (felhő)</text>
+
+      <!-- A1 ZIP -->
+      <rect class="box" x="30" y="40" width="320" height="44" rx="6"/>
+      <text class="t b" x="190" y="60" text-anchor="middle">Google Takeout ZIP</text>
+      <text class="t s" x="190" y="75" text-anchor="middle">(kézzel letöltve, nem kell kicsomagolni)</text>
+
+      <rect class="box skip" x="390" y="40" width="250" height="44" rx="6"/>
+      <text class="t w" x="515" y="60" text-anchor="middle">--dry-run kapcsoló</text>
+      <text class="t s" x="515" y="75" text-anchor="middle">csak kiírja, mit tenne, nem tölt fel</text>
+
+      <line class="ln" x1="190" y1="84" x2="190" y2="106" marker-end="url(#bar)"/>
+
+      <!-- A2 szűrés -->
+      <rect class="box" x="30" y="108" width="320" height="44" rx="6"/>
+      <text class="t b" x="190" y="128" text-anchor="middle">Csak képek maradnak</text>
+      <text class="t s" x="190" y="143" text-anchor="middle">jpg, png, heic, cr2, nef · a videót kihagyja</text>
+
+      <line class="ln" x1="190" y1="152" x2="190" y2="174" marker-end="url(#bar)"/>
+
+      <!-- A3 szerkesztett -->
+      <rect class="box" x="30" y="176" width="320" height="44" rx="6"/>
+      <text class="t b" x="190" y="196" text-anchor="middle">Van szerkesztett változat?</text>
+      <text class="t s" x="190" y="211" text-anchor="middle">igen: csak a szerkesztett megy tovább, az eredeti nem</text>
+
+      <line class="ln" x1="190" y1="220" x2="190" y2="242" marker-end="url(#bar)"/>
+
+      <!-- A4a SHA1 a B2-ben -->
+      <rect class="box key" x="30" y="244" width="320" height="44" rx="6"/>
+      <text class="t a" x="190" y="264" text-anchor="middle">SHA1 már fent van a Kepek02-ben?</text>
+      <text class="t s" x="190" y="279" text-anchor="middle">a lista indításkor készül a teljes vödörről</text>
+
+      <line class="ln" x1="190" y1="288" x2="190" y2="310" marker-end="url(#bar)"/>
+
+      <!-- A4b tombstone -->
+      <rect class="box key" x="30" y="312" width="320" height="44" rx="6"/>
+      <text class="t a" x="190" y="332" text-anchor="middle">SHA1 tudatosan törölt képé?</text>
+      <text class="t s" x="190" y="347" text-anchor="middle">deleted_sha1_list.csv (a Lumina Lomtára írja)</text>
+
+      <!-- kihagyás doboz -->
+      <rect class="box skip" x="400" y="256" width="240" height="88" rx="6"/>
+      <text class="t w" x="520" y="292" text-anchor="middle">Kihagyás</text>
+      <text class="t s" x="520" y="309" text-anchor="middle">a tartalom már fent van,</text>
+      <text class="t s" x="520" y="324" text-anchor="middle">vagy tudatosan törölték</text>
+      <line class="ln warn" x1="350" y1="266" x2="398" y2="266" marker-end="url(#baw)"/>
+      <text class="al w" x="358" y="258">igen</text>
+      <line class="ln warn" x1="350" y1="334" x2="398" y2="334" marker-end="url(#baw)"/>
+      <text class="al w" x="358" y="326">igen</text>
+
+      <line class="ln acc" x1="190" y1="356" x2="190" y2="386" marker-end="url(#baa)"/>
+      <text class="al a" x="200" y="376">nem: új kép</text>
+
+      <!-- A5 célútvonal -->
+      <rect class="box" x="30" y="388" width="320" height="44" rx="6"/>
+      <text class="t b" x="190" y="408" text-anchor="middle">Célútvonal számítása</text>
+      <text class="t s" x="190" y="423" text-anchor="middle">EXIF-dátum és album-név alapján (3. ábra)</text>
+
+      <line class="ln" x1="190" y1="432" x2="190" y2="450" marker-end="url(#bar)"/>
+
+      <!-- A6 konverzió + thumb -->
+      <rect class="box" x="30" y="452" width="320" height="44" rx="6"/>
+      <text class="t b" x="190" y="472" text-anchor="middle">HEIC/HEIF → JPG, 400 px bélyegkép</text>
+      <text class="t s" x="190" y="487" text-anchor="middle">memóriában, helyi ideiglenes fájl nélkül</text>
+
+      <line class="ln" x1="190" y1="496" x2="190" y2="518" marker-end="url(#bar)"/>
+
+      <!-- A7 rcat -->
+      <rect class="box" x="30" y="520" width="320" height="64" rx="6"/>
+      <text class="t b" x="190" y="544" text-anchor="middle">rclone rcat</text>
+      <text class="t s" x="190" y="561" text-anchor="middle">streamelés közvetlenül a ZIP-ből,</text>
+      <text class="t s" x="190" y="575" text-anchor="middle">nincs helyi köztes mappa</text>
+
+      <!-- B2 vödrök -->
+      <rect class="box key" x="720" y="514" width="250" height="34" rx="6"/>
+      <text class="t a" x="845" y="535" text-anchor="middle">Kepek02 (eredeti képek)</text>
+      <rect class="box key" x="720" y="556" width="250" height="34" rx="6"/>
+      <text class="t a" x="845" y="577" text-anchor="middle">kepek02-thumbs (bélyegképek)</text>
+      <line class="ln acc" x1="350" y1="531" x2="718" y2="531" marker-end="url(#baa)"/>
+      <line class="ln acc" x1="350" y1="573" x2="718" y2="573" marker-end="url(#baa)"/>
+      <text class="al a" x="440" y="523">kép</text>
+      <text class="al a" x="440" y="565">bélyegkép</text>
+
+      <line class="ln" x1="190" y1="584" x2="190" y2="610" marker-end="url(#bar)"/>
+
+      <!-- A8 napló -->
+      <rect class="box" x="30" y="612" width="320" height="36" rx="6"/>
+      <text class="t b" x="190" y="635" text-anchor="middle">Napló: feltoltes_terv_&lt;zip neve&gt;.csv</text>
+      <text class="t s" x="380" y="635">fájlonként: forrás, SHA1, státusz, célútvonal</text>
+    </svg>
+    </div>
+    <figcaption>
+      2. ábra: a Takeout ZIP közvetlenül, helyi köztes mappa nélkül kerül a B2-be. A két kiemelt döntés (SHA1-egyezés és tudatos törlés) védi meg a vödröt a duplikátumoktól és a visszakerülő, szándékosan törölt képektől.
+    </figcaption>
+  </figure>
+
+  <!-- 2. ábra: célútvonal -->
+  <figure style="margin-top: 36px">
+    <div class="scroll">
+    <svg viewBox="0 0 1010 300" role="img"
+         aria-label="Ha a fájl névvel ellátott album-mappában van, a célútvonal év/hónap/nap-esemény/fájlnév, különben év/hónap/fájlnév. Az év, hónap és nap mindig az EXIF-ből jön.">
+      <defs>
+        <marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+          <path d="M0 0 L10 5 L0 10 z" fill="currentColor"/>
+        </marker>
+        <marker id="aa2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+          <path d="M0 0 L10 5 L0 10 z" fill="var(--accent)"/>
+        </marker>
+      </defs>
+
+      <rect class="box" x="10" y="115" width="240" height="80" rx="6"/>
+      <text class="t b" x="130" y="148" text-anchor="middle">Kép a ZIP-ben</text>
+      <text class="t s" x="130" y="167" text-anchor="middle">EXIF-dátum + szülőmappa neve</text>
+      <text class="t s" x="130" y="182" text-anchor="middle">(pl. 2012_09_08 Koncert)</text>
+
+      <line class="ln" x1="250" y1="155" x2="298" y2="155" marker-end="url(#ar2)"/>
+
+      <rect class="box key" x="300" y="115" width="250" height="80" rx="6"/>
+      <text class="t a" x="425" y="150" text-anchor="middle">Névvel ellátott</text>
+      <text class="t a" x="425" y="169" text-anchor="middle">album-mappa?</text>
+
+      <path class="ln acc" d="M550 155 H585 V70 H618" marker-end="url(#aa2)"/>
+      <path class="ln" d="M550 155 H585 V240 H618" marker-end="url(#ar2)"/>
+      <text class="al a" x="560" y="115">igen</text>
+      <text class="al" x="560" y="205">nem</text>
+
+      <rect class="box key" x="620" y="35" width="380" height="70" rx="6"/>
+      <text class="t m" x="810" y="62" text-anchor="middle">ÉÉÉÉ/HH/NN-esemeny-neve/fajlnev.jpg</text>
+      <text class="t s" x="810" y="84" text-anchor="middle">a dátum az EXIF-ből, az album-névből csak az esemény szövege</text>
+
+      <rect class="box" x="620" y="205" width="380" height="70" rx="6"/>
+      <text class="t m" x="810" y="232" text-anchor="middle">ÉÉÉÉ/HH/fajlnev.jpg</text>
+      <text class="t s" x="810" y="254" text-anchor="middle">tiszta EXIF-alapú Év/Hónap mappa</text>
+    </svg>
+    </div>
+    <figcaption>
+      3. ábra: a célútvonal két ágon képződik. Mindkét ágban a mappa- és fájlnevek ugyanazon a tisztításon mennek át.
+    </figcaption>
+  </figure>
+
+  <h3>A célútvonal szabályai</h3>
+  <ul>
+    <li><strong>Dátum:</strong> mindig az EXIF <code>DateTimeOriginal</code>. Ha nincs, a ZIP-bejegyzés ideje a tartalék, albumos ágban pedig az album saját dátuma.</li>
+    <li><strong>Névvel ellátott album:</strong> <code>ÉÉÉÉ_HH_NN Név</code>, <code>ÉÉÉÉ_HH Név</code>, <code>ÉÉÉÉ Név</code> vagy dátum nélküli szöveges mappanév (pl. <code>karácsony</code>).</li>
+    <li><strong>Nem számít albumnak:</strong> az általános gyűjtőmappa (<code>2012 fotói</code>, <code>Photos from 2012</code>), a puszta évszám és az <code>@</code>-ot tartalmazó, megosztott album neve.</li>
+    <li><strong>Névtisztítás:</strong> ékezetek le, kisbetű, minden, ami nem <code>a-z</code>, <code>0-9</code> vagy pont, kötőjel lesz, a dupla kötőjelek összevonódnak.</li>
+    <li><strong>HEIC/HEIF:</strong> a célon mindig <code>.jpg</code>.</li>
+    <li><strong>Ha egy kép több különböző nevű albumban is szerepel,</strong> az algoritmus nem dönt, ez emberi döntést kér.</li>
+  </ul>
+
+  <h3>Mi változott a régi lánchoz képest</h3>
+  <ul>
+    <li><strong>Régi lánc:</strong> kézi kicsomagolás, <code>sort_by_date.py</code> (az album-nevek itt elvesztek), kézi átrendezés Intézőben, <code>prepare_photos.py</code> (tisztítás, konverzió, bélyegkép), majd <code>rclone copy</code>.</li>
+    <li><strong>Új lánc:</strong> egyetlen script, közvetlenül a ZIP-ből, SHA1-védelemmel és album-névvel. A kézi átrendezés lépése megszűnt.</li>
+    <li>A meglévő B2-tartalom 92%-a a kézi átrendezés miatt eltér a számolt Év/Hónap útvonaltól, ezért az új szabály csak az új feltöltésekre érvényes, a régi tartalmat nem javítja vissza.</li>
+  </ul>
+
+</main>
+</body>
+</html>

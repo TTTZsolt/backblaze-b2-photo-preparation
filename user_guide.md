@@ -52,6 +52,27 @@ python takeout_to_b2_feltoltes.py "C:\Users\zsolt.tuske\Pictures\Takeout\2017\ta
 Ez ténylegesen feltölti a `feltoltesre-kerulne` státuszú képeket (és a
 hozzájuk tartozó bélyegképeket) a B2-re.
 
+### 3/b. Hibás feltöltések újrapróbálása
+
+Ha éles feltöltés után maradt `feltoltesi-hiba` státuszú fájl, a grafikus
+felületen (`Takeout_B2_Feltolto_Inditasa.bat`) aktívvá válik a
+**„Hibás fájlok újrapróbálása (N db)”** gomb. Ez csak ezeket a fájlokat
+tölti fel újra, ugyanarra a célútvonalra. Nem kéri le újra a B2-listát, és
+nem nézi át újra a teljes ZIP-et, ezért gyors. A sikeres sorok a naplóban
+`feltoltve` státuszra váltanak. A gomb addig nyomható, amíg el nem fogynak
+a hibák.
+
+A gomb akkor is aktív, ha egy **korábban már feltöltött ZIP-et választasz
+ki**, és annak naplójában maradt hibás fájl. Ilyenkor az állapotsor kiírja:
+„Korábbi napló: N fájl feltöltése nem sikerült - újrapróbálható.” Így nem
+kell újra lefuttatni a teljes feltöltést.
+
+Parancssorból ugyanez:
+
+```cmd
+python takeout_to_b2_feltoltes.py "C:\...\takeout-....zip" --retry-failed
+```
+
 ### 4. Ellenőrzés
 
 A Lumina Képtár Dashboardján, vagy közvetlenül `rclone lsf
