@@ -62,6 +62,11 @@ nem nézi át újra a teljes ZIP-et, ezért gyors. A sikeres sorok a naplóban
 `feltoltve` státuszra váltanak. A gomb addig nyomható, amíg el nem fogynak
 a hibák.
 
+A gomb akkor is aktív, ha egy **korábban már feltöltött ZIP-et választasz
+ki**, és annak naplójában maradt hibás fájl. Ilyenkor az állapotsor kiírja:
+„Korábbi napló: N fájl feltöltése nem sikerült - újrapróbálható.” Így nem
+kell újra lefuttatni a teljes feltöltést.
+
 Parancssorból ugyanez:
 
 ```cmd

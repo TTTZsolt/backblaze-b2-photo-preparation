@@ -189,6 +189,35 @@ class App:
         self.settings["last_dir"] = os.path.dirname(path)
         save_settings(self.settings)
         self.update_start_state()
+        self.load_existing_plan(path)
+
+    def load_existing_plan(self, zip_path):
+        """Ha a kiválasztott ZIP-hez már van napló egy korábbi futásból, azt
+        betölti: aktív lesz az 'Eredmény megjelenítése', és ha maradt benne
+        'feltoltesi-hiba' sor, a 'Hibás fájlok újrapróbálása' gomb is."""
+        self.result_csv = None
+        self.retry_zip = None
+        self.result_btn.config(state="disabled")
+        plan_csv = None
+        if self.env_ok:  # a feltöltő modul csak rendben lévő környezetben importálható
+            try:
+                from takeout_to_b2_feltoltes import plan_csv_path_for
+                plan_csv = plan_csv_path_for(zip_path)
+            except Exception:
+                plan_csv = None
+        if plan_csv and os.path.exists(plan_csv):
+            self.result_csv = plan_csv
+            self.retry_zip = zip_path
+            self.result_btn.config(state="normal")
+        failed = self.update_retry_state()
+        if failed:
+            self.status_label.config(
+                text=f"Korábbi napló: {failed} fájl feltöltése nem sikerült - újrapróbálható.",
+                fg="#b45309")
+        elif self.result_csv:
+            self.status_label.config(text="Van korábbi napló ehhez a ZIP-hez.", fg="#555")
+        else:
+            self.status_label.config(text="", fg="#555")
 
     def start(self):
         if self.worker_running or not self.zip_path or not self.env_ok:
