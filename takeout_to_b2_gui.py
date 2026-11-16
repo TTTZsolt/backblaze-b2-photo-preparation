@@ -115,6 +115,13 @@ class App:
                                   variable=self.dry_run_var)
         dry_chk.grid(row=1, column=0, columnspan=2, sticky="w", pady=(8, 0))
 
+        # Gépenként megjegyzett beállítás, alapból bekapcsolva.
+        self.lumina_sync_var = tk.BooleanVar(value=self.settings.get("lumina_sync", True))
+        lumina_chk = tk.Checkbutton(
+            top, text="Feltöltés után a Lumina Kepek02 index frissítése (mint a Connect menü Resync gombja)",
+            variable=self.lumina_sync_var, command=self.on_lumina_sync_toggle)
+        lumina_chk.grid(row=5, column=0, columnspan=2, sticky="w", pady=(8, 0))
+
         self.start_btn = tk.Button(top, text="Ind\u00edt\u00e1s", command=self.start, width=20,
                                     state="disabled", bg="#4f46e5", fg="white")
         self.start_btn.grid(row=2, column=0, sticky="w", pady=(10, 0))
@@ -236,8 +243,13 @@ class App:
         thread = threading.Thread(target=self._run_worker, args=(zip_path, False, plan_csv), daemon=True)
         thread.start()
 
+    def on_lumina_sync_toggle(self):
+        self.settings["lumina_sync"] = bool(self.lumina_sync_var.get())
+        save_settings(self.settings)
+
     def _begin_work(self, status_text):
         self.worker_running = True
+        self.lumina_sync_now = bool(self.lumina_sync_var.get())
         for btn in (self.pick_btn, self.recheck_btn, self.start_btn, self.result_btn, self.retry_btn):
             btn.config(state="disabled")
         self.log_text.delete("1.0", "end")
@@ -268,10 +280,11 @@ class App:
         try:
             # késői import: a környezet-ellenőrzés előbb lefut
             from takeout_to_b2_feltoltes import process_zip, retry_failed
+            sync = self.lumina_sync_now  # a fő szálon olvasva (_begin_work)
             if retry_plan_csv:
-                result = retry_failed(zip_path, retry_plan_csv)
+                result = retry_failed(zip_path, retry_plan_csv, lumina_sync=sync)
             else:
-                result = process_zip(zip_path, dry_run=dry_run)
+                result = process_zip(zip_path, dry_run=dry_run, lumina_sync=sync)
         except Exception as e:
             import traceback
             error = e

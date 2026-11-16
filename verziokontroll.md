@@ -8,6 +8,8 @@ Ez a dokumentum követi a projekt mérföldköveit és fejlesztési szakaszait.
 
 # Verziótörténet
 
+- **V1.7-dev** (2026.11.16): Sikeres feltöltés vagy újrapróbálás után automatikusan elindul a Lumina Képtár (tablet) Kepek02 indexének frissítése, ugyanúgy, mint a Connect menü Resync gombjával. GUI-ban kikapcsolható, parancssorban `--no-lumina-sync`.
+
 - **V1.6** (2026.11.16): Takeout → B2 feltöltő: „Hibás fájlok újrapróbálása” gomb (és `--retry-failed` kapcsoló). Csak a napló `feltoltesi-hiba` sorait tölti fel újra, és a naplót helyben frissíti.
 
 - **V1.5** (2026.08.16): `sort_by_date.py` átalakítása: Google Fotók album-mappanév alapú célmappa-számítás (Év/Hónap/Nap-Eseménynév) a puszta Év/Hónap helyett, tartalom-hash (SHA1) alapú duplikátum-felismerés és `--dry-run` biztonsági kapcsoló. Lásd `mappazasi_algoritmus_specifikacio.md`.
@@ -18,6 +20,7 @@ Ez a dokumentum követi a projekt mérföldköveit és fejlesztési szakaszait.
 
 | Verzió | Sorszám | Dátum      | Commit üzenet                                                                                                                       |
 |:------ |:------- |:---------- |:----------------------------------------------------------------------------------------------------------------------------------- |
+| V1.7-dev | #1  | 2026.11.16 | Feltöltés után a Lumina Kepek02 index automatikus frissítése (POST /b2/sync), kikapcsolható jelölőnégyzet és --no-lumina-sync kapcsoló. |
 | V1.6 | #4    | 2026.11.16 | Verzió véglegesítése (V1.6-dev → V1.6), beolvasztás a main ágba. Élesben tesztelve: a 2015-004 ZIP 19 hibás fájlja újrapróbálással felment. |
 | V1.6 | #3    | 2026.11.16 | GUI: ZIP kiválasztásakor a korábbi napló betöltése; a hibás fájlok újrapróbálása gomb így régi ZIP-eknél is aktív. |
 | V1.6 | #2    | 2026.11.16 | Takeout → B2 feltöltő: hibás fájlok újrapróbálása gomb és --retry-failed kapcsoló, közös upload_one/write_plan_csv segédfüggvények. |

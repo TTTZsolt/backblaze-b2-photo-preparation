@@ -73,6 +73,21 @@ Parancssorból ugyanez:
 python takeout_to_b2_feltoltes.py "C:\...\takeout-....zip" --retry-failed
 ```
 
+### 3/c. A Lumina Képtár automatikus frissítése
+
+Ha egy éles feltöltés vagy újrapróbálás során legalább 1 kép felment, a
+program a végén automatikusan elindítja a Lumina Képtárban (tablet,
+`http://192.168.1.157:8000`) a Kepek02 index frissítését. Ez ugyanaz,
+mint a Connect menüben a Resync gomb. Indítás előtt kb. 30 mp-et vár, hogy
+a B2 már biztosan listázza az új fájlokat. A frissítés állapota a Connect
+menüben követhető.
+
+* Kikapcsolható a GUI-ban: „Feltöltés után a Lumina Kepek02 index
+  frissítése” jelölőnégyzet (a program gépenként megjegyzi).
+* Parancssorból: `--no-lumina-sync` kapcsolóval nem indítja el.
+* Ha a tablet nem érhető el, csak figyelmeztetést ír; ilyenkor a Connect
+  menü Resync gombjával később kézzel indítható.
+
 ### 4. Ellenőrzés
 
 A Lumina Képtár Dashboardján, vagy közvetlenül `rclone lsf

@@ -53,6 +53,14 @@ TARGET_REMOTE = f"{B2_REMOTE_PREFIX}:{TARGET_BUCKET}"
 # tombstone csak a Lomtar uritesekor keletkezik. Ezeket sem toltjuk fel ujra.
 TRASH_REMOTE = f"{B2_REMOTE_PREFIX}:torles-elott"
 
+# Az éles Lumina Képtár (tablet). Sikeres feltöltés után ennek a Kepek02
+# indexét frissítjük (ugyanaz, mint a Connect menü "Resync" gombja).
+# Figyelem: a tablet 8080-as portján a HolVan fut, a Lumina a 8000-esen.
+LUMINA_URL = "http://192.168.1.157:8000"
+# Várakozás a resync előtt: sok B2-művelet után a listázás átmenetileg
+# kevesebb fájlt adhat vissza (B2 eshetőleges konzisztencia).
+LUMINA_SYNC_DELAY_SEC = 30
+
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".heic", ".heif", ".cr2", ".nef"}
 VIDEO_EXTENSIONS = {".mp4", ".mov", ".avi", ".mkv", ".3gp", ".m4v", ".webm"}
 THUMB_SIZE = (400, 400)
@@ -365,11 +373,42 @@ def write_plan_csv(plan_csv, rows):
             time.sleep(1)
 
 
+def trigger_lumina_resync(lumina_url=LUMINA_URL, delay_sec=LUMINA_SYNC_DELAY_SEC):
+    """Elindítja a Lumina Képtárban a Kepek02 fiók újraindexelését (ugyanazt,
+    amit a Connect menü "Resync" gombja). Hiba esetén csak figyelmeztet -
+    a feltöltés eredményét ez nem befolyásolja. True, ha elindult."""
+    import time
+    import urllib.request
+    print(f"\n--- Lumina Képtár index frissítése ({lumina_url}) ---", flush=True)
+    if delay_sec:
+        print(f"Várok {delay_sec} mp-et, hogy a B2 listázás biztosan mutassa az új fájlokat...", flush=True)
+        time.sleep(delay_sec)
+    try:
+        with urllib.request.urlopen(f"{lumina_url}/b2/accounts", timeout=15) as resp:
+            accounts = json.load(resp)
+        account = next((a for a in accounts
+                        if (a.get("bucket_name") or "").lower() == TARGET_BUCKET.lower()), None)
+        if account is None:
+            print(f"FIGYELMEZTETÉS: a Luminában nincs '{TARGET_BUCKET}' vödrű fiók, "
+                  f"a frissítés kimaradt.", flush=True)
+            return False
+        req = urllib.request.Request(f"{lumina_url}/b2/sync/{account['id']}", method="POST", data=b"")
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            resp.read()
+        print(f"A Kepek02 index frissítése elindult a Luminában (fiók #{account['id']}). "
+              f"Az állapota a Connect menüben követhető.", flush=True)
+        return True
+    except Exception as e:
+        print(f"FIGYELMEZTETÉS: a Lumina nem érhető el, az index frissítése kimaradt ({e}). "
+              f"Később a Connect menü Resync gombjával indítható.", flush=True)
+        return False
+
+
 # ---------------------------------------------------------------------------
 # Fo folyamat
 # ---------------------------------------------------------------------------
 
-def process_zip(zip_path, dry_run=True):
+def process_zip(zip_path, dry_run=True, lumina_sync=False):
     print(f"--- Takeout ZIP feldolgozása: {zip_path} ---", flush=True)
     print(f"Mód: {'DRY-RUN (nem tölt fel semmit)' if dry_run else 'ÉLES FELTÖLTÉS'}", flush=True)
 
@@ -566,6 +605,8 @@ def process_zip(zip_path, dry_run=True):
                   "A 'Hibás fájlok újrapróbálása' gombbal (vagy --retry-failed kapcsolóval) "
                   "csak ezeket lehet újra megpróbálni.", flush=True)
     print(f"Napló mentve: {plan_csv}" if plan_csv else "Napló NEM mentődött (lásd fenti figyelmeztetés).", flush=True)
+    if lumina_sync and not dry_run and uploaded_ok:
+        trigger_lumina_resync()
     return plan_csv
 
 
@@ -577,7 +618,7 @@ def count_failed_in_plan(plan_csv):
         return sum(1 for row in csv.DictReader(f) if row.get("statusz") == FAILED_STATUS)
 
 
-def retry_failed(zip_path, plan_csv=None):
+def retry_failed(zip_path, plan_csv=None, lumina_sync=False):
     """Csak a napló 'feltoltesi-hiba' sorait próbálja újra feltölteni, ugyanarra
     a célútvonalra, mint az első körben. Nem kéri le újra a B2 SHA1-listáját és
     nem indexeli újra a ZIP-et. A naplót helyben frissíti (sikeres sor ->
@@ -621,6 +662,8 @@ def retry_failed(zip_path, plan_csv=None):
     print(f"Sikeresen feltöltve: {ok_count}", flush=True)
     print(f"Továbbra is hibás: {total - ok_count}", flush=True)
     print(f"Napló frissítve: {saved}" if saved else "Napló NEM mentődött (lásd fenti figyelmeztetés).", flush=True)
+    if lumina_sync and ok_count:
+        trigger_lumina_resync()
     return saved
 
 
@@ -637,9 +680,14 @@ if __name__ == "__main__":
         "--retry-failed", action="store_true",
         help="Csak a korábbi futás naplójában 'feltoltesi-hiba' státuszú fájlokat próbálja újra."
     )
+    parser.add_argument(
+        "--no-lumina-sync", action="store_true",
+        help="Sikeres feltöltés után NE indítsa el a Lumina Kepek02 index frissítését."
+    )
     args = parser.parse_args()
     zip_arg = args.zip_path.strip().strip('"')
+    sync = not args.no_lumina_sync
     if args.retry_failed:
-        retry_failed(zip_arg)
+        retry_failed(zip_arg, lumina_sync=sync)
     else:
-        process_zip(zip_arg, dry_run=args.dry_run)
+        process_zip(zip_arg, dry_run=args.dry_run, lumina_sync=sync)
