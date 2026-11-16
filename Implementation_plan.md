@@ -41,7 +41,23 @@ A tervet a chat-ben egyeztettük és jóváhagytad, mielőtt a kód megíródott
 - `--dry-run` biztonsági mód, mert ez a script **közvetlenül az éles**
   `Kepek02` vödörbe töltene fel.
 
-## Állapot: **tesztelésre vár, még nem futott le**
+## V1.7: Feltöltési nyilvántartás (jóváhagyva 2026-11-16)
+
+Probléma: csak a ZIP-enkénti napló (`feltoltes_terv_<zip>.csv`) jelezte,
+hogy egy ZIP-pel már futott a feltöltő, de egy próbafutás felülírta az éles
+naplót, és a napló megléte nem mutatta, hogy éles vagy próba volt.
+
+Megoldás:
+1. `feltoltesi_nyilvantartas.csv`: minden futás egy hozzáfűzött sor (időpont,
+   gép, verzió, ZIP neve/útvonala/mérete, mód, darabszámok, napló neve).
+   Írás/olvasás: `append_registry()` / `read_registry()` a feltöltőben.
+2. A próbafutás saját naplóba ír: `feltoltes_terv_<zip>_proba.csv`.
+3. GUI: verzió a címsorban (`verzio.py` az egyetlen forrás), ZIP
+   kiválasztásakor összefoglaló a nyilvántartásból, újbóli éles futás előtt
+   megerősítés.
+4. Egyszeri pótlás a régi naplókból: `nyilvantartas_potlas.py`.
+
+## Állapot (eredeti, 2026-08-16): **tesztelésre vár, még nem futott le**
 
 A script megíródott, de **még senki nem futtatta**, mert amikor kész lett,
 nem voltál a Lenovo közelében (ahol a Takeout ZIP-ek helyben vannak).

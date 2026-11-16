@@ -115,6 +115,19 @@ mely Takeout ZIP-ek hiányoznak legnagyobb arányban a B2-ről — ez alapján
       vagy a `takeout_b2_teljes_egyeztetes.csv` "hianyzik-b2-rol" sorai
       alapján kiválasztott releváns Takeout ZIP-ek végigfuttatásával)
 
+## V1.7: Feltöltési nyilvántartás
+
+- [x] Terv egyeztetve és jóváhagyva (2026-11-16, l. Implementation_plan.md)
+- [x] `feltoltesi_nyilvantartas.csv` írása minden futás végén (éles, próba,
+      újrapróbálás) — `append_registry()` / `read_registry()`
+- [x] Próbafutás külön naplóba (`..._proba.csv`), az éles napló védelme
+- [x] GUI: verzió a címsorban (`verzio.py`), nyilvántartás-összefoglaló
+      ZIP kiválasztásakor, megerősítés újbóli éles futás előtt
+- [x] Régi naplók pótlása (`nyilvantartas_potlas.py --iras`, 8 sor beírva)
+- [ ] GUI kipróbálása élesben (újraindítás után ZIP kiválasztása, egy
+      próbafutás, a megerősítő ablak ellenőrzése)
+- [ ] A `takeout-2015 képek-…-3-003.zip` 1 hibás fájljának újrapróbálása
+
 ## Nyitott, még nem eldöntött kérdések
 
 - Mi legyen a több, egymástól eltérő nevű albumban is szereplő fájlokkal

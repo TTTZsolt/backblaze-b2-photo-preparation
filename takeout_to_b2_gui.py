@@ -21,6 +21,8 @@ import importlib.util
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
+from verzio import APP_VERSION
+
 # A NAS-on lévő Takeout-mappa (alatta évenkénti almappák). Ha elérhető, a
 # fájlválasztó itt nyílik meg - hacsak nincs utoljára használt mappa.
 NAS_TAKEOUT_DIR = r"X:\Pictures\takeout"
@@ -90,7 +92,7 @@ class QueueWriter:
 class App:
     def __init__(self, root):
         self.root = root
-        root.title("Takeout \u2192 B2 Felt\u00f6lt\u0151")
+        root.title(f"Takeout \u2192 B2 Felt\u00f6lt\u0151 \u2013 v{APP_VERSION}")
         root.geometry("820x560")
 
         self.zip_path = None
@@ -126,7 +128,7 @@ class App:
                                     state="disabled", bg="#4f46e5", fg="white")
         self.start_btn.grid(row=2, column=0, sticky="w", pady=(10, 0))
 
-        self.status_label = tk.Label(top, text="", anchor="w", fg="#555")
+        self.status_label = tk.Label(top, text="", anchor="w", fg="#555", justify="left", wraplength=560)
         self.status_label.grid(row=2, column=1, sticky="we", padx=(10, 0))
 
         self.recheck_btn = tk.Button(top, text="Környezet újraellenőrzése", command=self.run_env_check)
@@ -205,31 +207,78 @@ class App:
         self.result_csv = None
         self.retry_zip = None
         self.result_btn.config(state="disabled")
-        plan_csv = None
+        plan_csv = dry_csv = None
         if self.env_ok:  # a feltöltő modul csak rendben lévő környezetben importálható
             try:
                 from takeout_to_b2_feltoltes import plan_csv_path_for
                 plan_csv = plan_csv_path_for(zip_path)
+                dry_csv = plan_csv_path_for(zip_path, dry_run=True)
             except Exception:
-                plan_csv = None
+                plan_csv = dry_csv = None
         if plan_csv and os.path.exists(plan_csv):
+            # Éles napló: megjeleníthető és (ha van benne hiba) újrapróbálható.
             self.result_csv = plan_csv
             self.retry_zip = zip_path
             self.result_btn.config(state="normal")
+        elif dry_csv and os.path.exists(dry_csv):
+            # Csak próbafutás volt: megjeleníthető, de nincs mit újrapróbálni.
+            self.result_csv = dry_csv
+            self.result_btn.config(state="normal")
         failed = self.update_retry_state()
+        history = self.registry_summary(zip_path)
         if failed:
-            self.status_label.config(
-                text=f"Korábbi napló: {failed} fájl feltöltése nem sikerült - újrapróbálható.",
-                fg="#b45309")
-        elif self.result_csv:
-            self.status_label.config(text="Van korábbi napló ehhez a ZIP-hez.", fg="#555")
-        else:
-            self.status_label.config(text="", fg="#555")
+            history += f" {failed} fájl feltöltése nem sikerült - újrapróbálható."
+        self.status_label.config(text=history, fg="#b45309" if failed else "#555")
+
+    def registry_rows(self, zip_path):
+        """A feltöltési nyilvántartás sorai ehhez a ZIP-hez (üres, ha nem olvasható)."""
+        if not self.env_ok:
+            return []
+        try:
+            from takeout_to_b2_feltoltes import read_registry
+            return read_registry(zip_path)
+        except Exception:
+            return []
+
+    def registry_summary(self, zip_path):
+        """Egysoros összefoglaló a nyilvántartásból: volt-e már éles feltöltés,
+        vagy csak próbafutás."""
+        rows = self.registry_rows(zip_path)
+        live = [r for r in rows if r.get("mod") == "eles"]
+        if live:
+            last = live[-1]
+            text = (f"Élesben feltöltve: {last.get('idopont', '')[:16]} ({last.get('gep') or '?'}) - "
+                    f"{last.get('sikeres') or 0} sikeres, {last.get('hibas') or 0} hiba.")
+            if len(live) > 1:
+                text += f" Összesen {len(live)} éles futás volt."
+            # Csak az utolsó éles futás utáni újrapróbálások számítanak.
+            retries = [r for r in rows[rows.index(last) + 1:] if r.get("mod") == "ujraproba"]
+            if retries:
+                text += (f" Újrapróbálva: {len(retries)}x, utána "
+                         f"{retries[-1].get('hibas') or 0} hiba maradt.")
+            return text
+        dry = [r for r in rows if r.get("mod") == "proba"]
+        if dry:
+            last = dry[-1]
+            return (f"Eddig csak próbafutás volt: {last.get('idopont', '')[:16]} - "
+                    f"{last.get('feltoltesre_szant') or 0} kép kerülne fel.")
+        return "Ez a ZIP még nem szerepel a feltöltési nyilvántartásban."
 
     def start(self):
         if self.worker_running or not self.zip_path or not self.env_ok:
             return
         dry_run = self.dry_run_var.get()
+        if not dry_run:
+            live = [r for r in self.registry_rows(self.zip_path) if r.get("mod") == "eles"]
+            if live and not messagebox.askyesno(
+                    "Már feltöltött ZIP",
+                    f"Ezt a ZIP-et már feltöltötted élesben "
+                    f"({live[-1].get('idopont', '')[:16]}, {live[-1].get('gep') or '?'}).\n\n"
+                    f"Az újbóli futás nem tölt fel duplikátumot (SHA1-ellenőrzés), "
+                    f"de felülírja az előző éles naplót.\n"
+                    f"A hibás fájlokhoz a 'Hibás fájlok újrapróbálása' gomb való.\n\n"
+                    f"Biztosan újra elindítod?"):
+                return
         self.retry_zip = None if dry_run else self.zip_path
         self._begin_work("Feldolgoz\u00e1s foly\u00e1ban...")
         thread = threading.Thread(target=self._run_worker, args=(self.zip_path, dry_run), daemon=True)
@@ -328,6 +377,9 @@ class App:
         self.recheck_btn.config(state="normal")
         self.update_start_state()
         failed = self.update_retry_state()
+        if self.zip_path:
+            self.log_text.insert("end", f"\nNyilvántartás: {self.registry_summary(self.zip_path)}\n")
+            self.log_text.see("end")
         if error:
             self.status_label.config(text="Hiba t\u00f6rt\u00e9nt.", fg="#dc2626")
             messagebox.showerror("Hiba", f"A feldolgoz\u00e1s hib\u00e1val le\u00e1llt:\n{error}")

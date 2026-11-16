@@ -45,6 +45,8 @@ for _stream in (sys.stdout, sys.stderr):
 # Beallitasok
 # ---------------------------------------------------------------------------
 
+from verzio import APP_VERSION  # a verzió egyetlen forrása: verzio.py
+
 B2_REMOTE_PREFIX = "b2_storage"
 TARGET_BUCKET = "Kepek02"
 THUMB_REMOTE = f"{B2_REMOTE_PREFIX}:kepek02-thumbs"
@@ -345,10 +347,13 @@ def upload_one(data: bytes, filename: str, b2_key: str) -> bool:
     return ok_main and rclone_upload_bytes(thumb_bytes, f"{THUMB_REMOTE}/{b2_key}")
 
 
-def plan_csv_path_for(zip_path):
+def plan_csv_path_for(zip_path, dry_run=False):
+    """Az éles napló: feltoltes_terv_<zip>.csv. A próbafutás külön fájlba ír
+    (..._proba.csv), hogy ne írja felül egy korábbi éles feltöltés naplóját."""
     zip_basename = os.path.splitext(os.path.basename(zip_path))[0]
     out_dir = os.path.dirname(os.path.abspath(__file__))
-    return os.path.join(out_dir, f"feltoltes_terv_{zip_basename}.csv")
+    suffix = "_proba" if dry_run else ""
+    return os.path.join(out_dir, f"feltoltes_terv_{zip_basename}{suffix}.csv")
 
 
 def write_plan_csv(plan_csv, rows):
@@ -371,6 +376,86 @@ def write_plan_csv(plan_csv, rows):
                 return None
             print(f"  [Ujraprobalkozas {attempt}/5] Naplo CSV zarolva, varok 1 mp-et...", flush=True)
             time.sleep(1)
+
+
+# ---------------------------------------------------------------------------
+# Feltoltesi nyilvantartas: minden futas egy uj sor, a regi sorok soha nem
+# irodnak felul. A mappa a Google Drive-on van, igy minden gep ugyanazt latja.
+# ---------------------------------------------------------------------------
+
+REGISTRY_FILENAME = "feltoltesi_nyilvantartas.csv"
+REGISTRY_FIELDS = [
+    "idopont", "gep", "verzio", "zip_nev", "zip_utvonal", "zip_meret", "mod",
+    "egyedi_tartalom", "mar_fent", "lomtarban", "szandekosan_torolt",
+    "feltoltesre_szant", "sikeres", "hibas", "naplo",
+]
+MODE_LIVE, MODE_DRY, MODE_RETRY = "eles", "proba", "ujraproba"
+
+
+def registry_path():
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), REGISTRY_FILENAME)
+
+
+def append_registry(zip_path, mode, counts, plan_csv, registry=None, overrides=None):
+    """Egy sort fűz a nyilvántartáshoz. Átmeneti Google Drive zárolásnál
+    néhányszor újrapróbálja; hiba esetén csak figyelmeztet (a feltöltés
+    eredményét ez nem befolyásolja). True, ha a sor bekerült.
+    overrides: mezők felülírása (pl. pótlásnál az időpont és a gép)."""
+    import time
+    import socket
+    registry = registry or registry_path()
+    try:
+        zip_size = os.path.getsize(zip_path)
+    except OSError:
+        zip_size = ""
+    row = {
+        "idopont": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "gep": socket.gethostname(),
+        "verzio": APP_VERSION,
+        "zip_nev": os.path.basename(zip_path),
+        "zip_utvonal": os.path.abspath(zip_path),
+        "zip_meret": zip_size,
+        "mod": mode,
+        "naplo": os.path.basename(plan_csv) if plan_csv else "",
+    }
+    for key in REGISTRY_FIELDS:
+        row.setdefault(key, counts.get(key, ""))
+    row.update(overrides or {})
+    for attempt in range(1, 6):
+        try:
+            is_new = not os.path.exists(registry) or os.path.getsize(registry) == 0
+            with open(registry, "a", newline="", encoding="utf-8") as f:
+                writer = csv.DictWriter(f, fieldnames=REGISTRY_FIELDS)
+                if is_new:
+                    writer.writeheader()
+                writer.writerow(row)
+            return True
+        except PermissionError as e:
+            if attempt == 5:
+                print(f"FIGYELMEZTETÉS: a nyilvántartásba írás sikertelen ({e}).", flush=True)
+                return False
+            time.sleep(1)
+
+
+def read_registry(zip_path=None, registry=None):
+    """A nyilvántartás sorai (legrégebbi elöl). Ha zip_path meg van adva, csak
+    az ahhoz a ZIP-hez tartozók: azonos név, és ha mindkét oldalon ismert,
+    azonos méret is."""
+    registry = registry or registry_path()
+    if not os.path.exists(registry):
+        return []
+    with open(registry, newline="", encoding="utf-8") as f:
+        rows = list(csv.DictReader(f))
+    if zip_path is None:
+        return rows
+    name = os.path.basename(zip_path)
+    try:
+        size = str(os.path.getsize(zip_path))
+    except OSError:
+        size = ""
+    return [r for r in rows
+            if r.get("zip_nev") == name
+            and (not size or not r.get("zip_meret") or r.get("zip_meret") == size)]
 
 
 def trigger_lumina_resync(lumina_url=LUMINA_URL, delay_sec=LUMINA_SYNC_DELAY_SEC):
@@ -409,7 +494,7 @@ def trigger_lumina_resync(lumina_url=LUMINA_URL, delay_sec=LUMINA_SYNC_DELAY_SEC
 # ---------------------------------------------------------------------------
 
 def process_zip(zip_path, dry_run=True, lumina_sync=False):
-    print(f"--- Takeout ZIP feldolgozása: {zip_path} ---", flush=True)
+    print(f"--- Takeout ZIP feldolgozása (v{APP_VERSION}): {zip_path} ---", flush=True)
     print(f"Mód: {'DRY-RUN (nem tölt fel semmit)' if dry_run else 'ÉLES FELTÖLTÉS'}", flush=True)
 
     if not os.path.exists(zip_path):
@@ -588,7 +673,7 @@ def process_zip(zip_path, dry_run=True, lumina_sync=False):
     # mint a git packed-refs.lock hibaja ebben a repoban) - ezert nehany
     # ujraprobalkozassal irjuk ki, hogy egy atmeneti zarolas ne szakitsa
     # meg a mar elvegzett munkat (feltoltes/dry-run terv) csak a naplo miatt.
-    plan_csv = write_plan_csv(plan_csv_path_for(zip_path), plan_rows)
+    plan_csv = write_plan_csv(plan_csv_path_for(zip_path, dry_run=dry_run), plan_rows)
 
     print("\n--- KÉSZ ---", flush=True)
     print(f"Egyedi tartalom összesen: {len(by_hash)}", flush=True)
@@ -605,6 +690,15 @@ def process_zip(zip_path, dry_run=True, lumina_sync=False):
                   "A 'Hibás fájlok újrapróbálása' gombbal (vagy --retry-failed kapcsolóval) "
                   "csak ezeket lehet újra megpróbálni.", flush=True)
     print(f"Napló mentve: {plan_csv}" if plan_csv else "Napló NEM mentődött (lásd fenti figyelmeztetés).", flush=True)
+    append_registry(zip_path, MODE_DRY if dry_run else MODE_LIVE, {
+        "egyedi_tartalom": len(by_hash),
+        "mar_fent": already_exists,
+        "lomtarban": in_trash_skipped,
+        "szandekosan_torolt": deliberately_skipped,
+        "feltoltesre_szant": to_upload,
+        "sikeres": "" if dry_run else uploaded_ok,
+        "hibas": "" if dry_run else upload_failed,
+    }, plan_csv)
     if lumina_sync and not dry_run and uploaded_ok:
         trigger_lumina_resync()
     return plan_csv
@@ -662,6 +756,9 @@ def retry_failed(zip_path, plan_csv=None, lumina_sync=False):
     print(f"Sikeresen feltöltve: {ok_count}", flush=True)
     print(f"Továbbra is hibás: {total - ok_count}", flush=True)
     print(f"Napló frissítve: {saved}" if saved else "Napló NEM mentődött (lásd fenti figyelmeztetés).", flush=True)
+    append_registry(zip_path, MODE_RETRY, {
+        "feltoltesre_szant": total, "sikeres": ok_count, "hibas": total - ok_count,
+    }, plan_csv)
     if lumina_sync and ok_count:
         trigger_lumina_resync()
     return saved

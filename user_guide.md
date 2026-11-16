@@ -27,8 +27,10 @@ helyesen kódolt naplófájlba menti az eredményt).
 
 ### 2. Az eredmény átnézése
 
-A futás után keletkezik egy `feltoltes_terv_<zip neve>.csv` fájl a
-projekt gyökerében. Oszlopai:
+A futás után keletkezik egy napló a projekt gyökerében: próbafutásnál
+`feltoltes_terv_<zip neve>_proba.csv`, éles futásnál
+`feltoltes_terv_<zip neve>.csv`. A kettő külön fájl, így egy későbbi
+próbafutás nem írja felül az éles feltöltés naplóját. Oszlopai:
 
 | Oszlop | Jelentése |
 |---|---|
@@ -87,6 +89,36 @@ menüben követhető.
 * Parancssorból: `--no-lumina-sync` kapcsolóval nem indítja el.
 * Ha a tablet nem érhető el, csak figyelmeztetést ír; ilyenkor a Connect
   menü Resync gombjával később kézzel indítható.
+
+### 3/d. Feltöltési nyilvántartás: melyik ZIP-pel mi történt már?
+
+Minden futás (próba, éles, újrapróbálás) a végén egy sort fűz a
+`feltoltesi_nyilvantartas.csv` fájlhoz. Ez a fájl soha nem íródik felül,
+csak bővül, és a Google Drive-on van, így minden gépről ugyanaz látszik.
+Excelben is megnyitható. Egy sorban: időpont, gép, programverzió, ZIP neve,
+útvonala és mérete, mód (`eles` / `proba` / `ujraproba`), a darabszámok
+(egyedi, már fent, lomtárban, szándékosan törölt, feltöltésre szánt,
+sikeres, hibás) és a hozzá tartozó napló neve.
+
+A GUI-ban:
+
+* **ZIP kiválasztásakor** az állapotsor kiírja, mi szerepel róla a
+  nyilvántartásban, pl. „Élesben feltöltve: 2026-11-16 22:14 (…) - 429
+  sikeres, 0 hiba.” vagy „Eddig csak próbafutás volt: …”, vagy hogy még
+  nem szerepel.
+* **Ha egy már élesben feltöltött ZIP-et újra élesben indítasz**, a program
+  megerősítést kér. (Duplikátum ilyenkor sem kerül fel, de az előző éles
+  napló felülíródik.)
+* A ZIP-et a **neve és mérete** azonosítja; ha átnevezed, új ZIP-nek számít.
+
+A nyilvántartás bevezetése (V1.7) előtti futásokat a
+`nyilvantartas_potlas.py` vette fel a meglévő naplókból (gép: „ismeretlen
+(pótolva)”). Újra futtatva csak azt a ZIP-et veszi fel, ami még nem szerepel:
+
+```cmd
+python nyilvantartas_potlas.py           (csak kiírja, mit venne fel)
+python nyilvantartas_potlas.py --iras    (be is írja)
+```
 
 ### 4. Ellenőrzés
 
